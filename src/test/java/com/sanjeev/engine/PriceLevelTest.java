@@ -1,6 +1,7 @@
 package com.sanjeev.engine;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -47,6 +48,38 @@ class PriceLevelTest {
         ravi.fill(20);
 
         assertEquals(60, level.totalQuantity());
+    }
+
+    @Test
+    void peekFirstShowsTheOldestOrderWithoutRemovingIt() {
+        PriceLevel level = new PriceLevel(4000);
+        Order ravi = sell(1, 50);
+        level.add(ravi);
+        level.add(sell(2, 30));
+
+        assertEquals(ravi, level.peekFirst());
+        assertEquals(2, level.size());
+    }
+
+    @Test
+    void removeFirstTakesTheOldestOrderOutOfTheLine() {
+        PriceLevel level = new PriceLevel(4000);
+        Order ravi = sell(1, 50);
+        Order meena = sell(2, 30);
+        level.add(ravi);
+        level.add(meena);
+
+        assertEquals(ravi, level.removeFirst());
+        assertEquals(meena, level.peekFirst());
+        assertEquals(1, level.size());
+    }
+
+    @Test
+    void peekAndRemoveOnAnEmptyLevelGiveNull() {
+        PriceLevel level = new PriceLevel(4000);
+
+        assertNull(level.peekFirst());
+        assertNull(level.removeFirst());
     }
 
     @Test

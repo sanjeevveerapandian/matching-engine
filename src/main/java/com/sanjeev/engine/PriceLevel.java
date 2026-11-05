@@ -34,6 +34,16 @@ public final class PriceLevel {
         queue.addLast(order);
     }
 
+    /** The oldest order in the queue (next to trade), or null if empty. O(1). */
+    public Order peekFirst() {
+        return queue.peekFirst();
+    }
+
+    /** Remove and return the oldest order, or null if empty. O(1). */
+    public Order removeFirst() {
+        return queue.pollFirst();
+    }
+
     /** Sum of the unfilled quantity of every order here. O(n) in orders at this price. */
     public long totalQuantity() {
         long total = 0;

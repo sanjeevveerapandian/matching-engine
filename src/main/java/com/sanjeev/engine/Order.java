@@ -11,7 +11,11 @@ package com.sanjeev.engine;
  */
 public final class Order {
 
+    /** Name used when the caller does not say who placed the order. */
+    public static final String ANONYMOUS = "anonymous";
+
     private final long id;
+    private final String trader;
     private final Side side;
     private final long priceInPaise;
     private final long originalQuantity;
@@ -26,6 +30,18 @@ public final class Order {
      * @param sequence     arrival number given by the engine; lower = earlier (time priority)
      */
     public Order(long id, Side side, long priceInPaise, long quantity, long sequence) {
+        this(id, ANONYMOUS, side, priceInPaise, quantity, sequence);
+    }
+
+    /**
+     * Same as above, plus the name of the trader who placed the order (shown on trades).
+     *
+     * @param trader who placed it, must not be null or blank
+     */
+    public Order(long id, String trader, Side side, long priceInPaise, long quantity, long sequence) {
+        if (trader == null || trader.isBlank()) {
+            throw new IllegalArgumentException("trader must not be null or blank");
+        }
         if (side == null) {
             throw new IllegalArgumentException("side must not be null");
         }
@@ -36,6 +52,7 @@ public final class Order {
             throw new IllegalArgumentException("quantity must be positive, got " + quantity);
         }
         this.id = id;
+        this.trader = trader;
         this.side = side;
         this.priceInPaise = priceInPaise;
         this.originalQuantity = quantity;
@@ -67,6 +84,10 @@ public final class Order {
         return id;
     }
 
+    public String getTrader() {
+        return trader;
+    }
+
     public Side getSide() {
         return side;
     }
@@ -89,7 +110,7 @@ public final class Order {
 
     @Override
     public String toString() {
-        return "Order{id=" + id + ", " + side + " " + remainingQuantity + "/" + originalQuantity
+        return "Order{id=" + id + ", " + trader + " " + side + " " + remainingQuantity + "/" + originalQuantity
                 + " @ " + priceInPaise + "p, seq=" + sequence + "}";
     }
 }

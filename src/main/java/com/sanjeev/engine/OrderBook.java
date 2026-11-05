@@ -67,6 +67,21 @@ public final class OrderBook {
         return result;
     }
 
+    /** The best (first) price level on one side, or null if that side is empty. O(log P). */
+    PriceLevel bestLevel(Side side) {
+        TreeMap<Long, PriceLevel> map = sideOf(side);
+        return map.isEmpty() ? null : map.firstEntry().getValue();
+    }
+
+    /** Remove a price level from the map if it has no orders left. O(log P). */
+    void removeLevelIfEmpty(Side side, long priceInPaise) {
+        TreeMap<Long, PriceLevel> map = sideOf(side);
+        PriceLevel level = map.get(priceInPaise);
+        if (level != null && level.isEmpty()) {
+            map.remove(priceInPaise);
+        }
+    }
+
     /** The queue at one exact price, or null if none. Package-private: for tests, not for callers. */
     PriceLevel levelAt(Side side, long priceInPaise) {
         return sideOf(side).get(priceInPaise);

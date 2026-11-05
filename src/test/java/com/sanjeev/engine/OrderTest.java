@@ -89,6 +89,26 @@ class OrderTest {
     }
 
     @Test
+    void orderRemembersWhichTraderPlacedIt() {
+        Order ravi = new Order(1, "Ravi", Side.SELL, 4000, 50, 1);
+
+        assertEquals("Ravi", ravi.getTrader());
+    }
+
+    @Test
+    void orderCreatedWithoutATraderNameIsAnonymous() {
+        assertEquals(Order.ANONYMOUS, sellTomatoes(50).getTrader());
+    }
+
+    @Test
+    void orderWithNullOrBlankTraderNameIsRejected() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new Order(1, null, Side.SELL, 4000, 50, 1));
+        assertThrows(IllegalArgumentException.class,
+                () -> new Order(1, "  ", Side.SELL, 4000, 50, 1));
+    }
+
+    @Test
     void buyAndSellAreOppositesOfEachOther() {
         assertEquals(Side.SELL, Side.BUY.opposite());
         assertEquals(Side.BUY, Side.SELL.opposite());

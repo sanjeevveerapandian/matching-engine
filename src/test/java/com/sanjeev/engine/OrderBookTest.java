@@ -67,6 +67,32 @@ class OrderBookTest {
     }
 
     @Test
+    void bestLevelIsTheBestPriceOnThatSideOrNullWhenEmpty() {
+        assertNull(book.bestLevel(Side.SELL));
+
+        rest(Side.SELL, 3300, 1);
+        rest(Side.SELL, 3100, 1);
+        rest(Side.BUY, 2900, 1);
+        rest(Side.BUY, 3000, 1);
+
+        assertEquals(3100, book.bestLevel(Side.SELL).getPriceInPaise());
+        assertEquals(3000, book.bestLevel(Side.BUY).getPriceInPaise());
+    }
+
+    @Test
+    void emptyLevelIsRemovedFromTheBookButANonEmptyOneIsKept() {
+        rest(Side.SELL, 3100, 10);
+        rest(Side.SELL, 3200, 10);
+
+        book.removeLevelIfEmpty(Side.SELL, 3100);
+        assertEquals(3100L, book.bestAsk());
+
+        book.bestLevel(Side.SELL).removeFirst();
+        book.removeLevelIfEmpty(Side.SELL, 3100);
+        assertEquals(3200L, book.bestAsk());
+    }
+
+    @Test
     void spreadIsBestAskMinusBestBid() {
         rest(Side.BUY, 3000, 10);
         rest(Side.BUY, 3050, 10);
