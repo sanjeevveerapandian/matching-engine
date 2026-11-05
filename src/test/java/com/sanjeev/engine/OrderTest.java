@@ -148,6 +148,54 @@ class OrderTest {
     }
 
     @Test
+    void ordersCreatedWithTheConstructorsAreGoodTillCancelled() {
+        assertEquals(TimeInForce.GTC, sellTomatoes(50).getTimeInForce());
+        assertEquals(TimeInForce.GTC, new Order(1, "Ravi", Side.SELL, 4000, 50, 1).getTimeInForce());
+    }
+
+    @Test
+    void limitFactoryCreatesLimitOrdersWithTheRequestedTimeInForce() {
+        Order ioc = Order.limit(1, "Anu", Side.BUY, 4000, 10, 1, TimeInForce.IOC);
+        Order fok = Order.limit(2, "Anu", Side.BUY, 4000, 10, 2, TimeInForce.FOK);
+
+        assertEquals(OrderType.LIMIT, ioc.getType());
+        assertEquals(4000, ioc.getPriceInPaise());
+        assertEquals(TimeInForce.IOC, ioc.getTimeInForce());
+        assertEquals(TimeInForce.FOK, fok.getTimeInForce());
+    }
+
+    @Test
+    void limitFactoryStillValidatesPriceQuantityAndTimeInForce() {
+        assertThrows(IllegalArgumentException.class,
+                () -> Order.limit(1, "Anu", Side.BUY, 0, 10, 1, TimeInForce.IOC));
+        assertThrows(IllegalArgumentException.class,
+                () -> Order.limit(1, "Anu", Side.BUY, 4000, 0, 1, TimeInForce.IOC));
+        assertThrows(IllegalArgumentException.class,
+                () -> Order.limit(1, "Anu", Side.BUY, 4000, 10, 1, null));
+    }
+
+    @Test
+    void reducingAnOrderShrinksBothQuantitiesByTheSameAmount() {
+        Order ravi = sellTomatoes(50);
+        ravi.fill(20); // 30 left, 20 traded
+
+        ravi.reduceQuantityTo(10);
+
+        assertEquals(10, ravi.getRemainingQuantity());
+        assertEquals(30, ravi.getOriginalQuantity());
+    }
+
+    @Test
+    void reducingAnOrderToTheSameLargerOrNonPositiveQuantityIsRejected() {
+        Order ravi = sellTomatoes(50);
+
+        assertThrows(IllegalArgumentException.class, () -> ravi.reduceQuantityTo(50));
+        assertThrows(IllegalArgumentException.class, () -> ravi.reduceQuantityTo(60));
+        assertThrows(IllegalArgumentException.class, () -> ravi.reduceQuantityTo(0));
+        assertEquals(50, ravi.getRemainingQuantity());
+    }
+
+    @Test
     void buyAndSellAreOppositesOfEachOther() {
         assertEquals(Side.SELL, Side.BUY.opposite());
         assertEquals(Side.BUY, Side.SELL.opposite());

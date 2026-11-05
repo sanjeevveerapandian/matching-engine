@@ -11,13 +11,13 @@ import org.junit.jupiter.api.Test;
 
 class MatchingEngineTest {
 
-    private MatchingEngine engine;
+    private CheckedEngine engine;
     private OrderBook book;
     private long nextId;
 
     @BeforeEach
     void freshEngine() {
-        engine = new MatchingEngine();
+        engine = new CheckedEngine();
         book = engine.book();
         nextId = 1;
     }

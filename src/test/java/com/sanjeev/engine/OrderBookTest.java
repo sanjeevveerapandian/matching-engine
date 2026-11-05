@@ -27,6 +27,7 @@ class OrderBookTest {
         Order order = new Order(nextId, side, price, qty, nextId);
         nextId++;
         book.addResting(order);
+        BookInvariants.check(book);
         return order;
     }
 
@@ -119,6 +120,7 @@ class OrderBookTest {
         assertTrue(book.contains(ravi.getId()));
 
         book.cancel(ravi.getId());
+        BookInvariants.check(book);
 
         assertFalse(book.contains(ravi.getId()));
     }

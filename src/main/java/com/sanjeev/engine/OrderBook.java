@@ -1,6 +1,8 @@
 package com.sanjeev.engine;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -134,6 +136,26 @@ public final class OrderBook {
     /** The queue at one exact price, or null if none. Package-private: for tests, not for callers. */
     PriceLevel levelAt(Side side, long priceInPaise) {
         return sideOf(side).get(priceInPaise);
+    }
+
+    /** The resting order with this id, or null. O(1). Package-private: for the engine. */
+    Order restingOrder(long orderId) {
+        return index.get(orderId);
+    }
+
+    /** Price levels of one side, best price first, read-only. Package-private: for the engine. */
+    Collection<PriceLevel> levelsBestFirst(Side side) {
+        return Collections.unmodifiableCollection(sideOf(side).values());
+    }
+
+    /** The real price map of one side. Package-private: for BookInvariants and tests ONLY. */
+    Map<Long, PriceLevel> levelsOf(Side side) {
+        return sideOf(side);
+    }
+
+    /** The real index map. Package-private: for BookInvariants and tests ONLY. */
+    Map<Long, Order> rawIndex() {
+        return index;
     }
 
     /** How many entries the index holds. Package-private: for tests. */
