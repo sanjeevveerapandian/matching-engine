@@ -39,6 +39,11 @@ public final class PriceLevel {
         return queue.peekFirst();
     }
 
+    /** The newest order in the queue (last to trade), or null if empty. O(1). */
+    public Order peekLast() {
+        return queue.peekLast();
+    }
+
     /** Remove and return the oldest order, or null if empty. O(1). */
     public Order removeFirst() {
         return queue.pollFirst();

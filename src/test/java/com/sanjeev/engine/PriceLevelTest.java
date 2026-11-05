@@ -63,6 +63,22 @@ class PriceLevelTest {
     }
 
     @Test
+    void peekLastShowsTheNewestOrderWithoutRemovingIt() {
+        PriceLevel level = new PriceLevel(4000);
+        level.add(sell(1, 50));
+        Order meena = sell(2, 30);
+        level.add(meena);
+
+        assertEquals(meena, level.peekLast());
+        assertEquals(2, level.size());
+    }
+
+    @Test
+    void peekLastOnAnEmptyLevelGivesNull() {
+        assertNull(new PriceLevel(4000).peekLast());
+    }
+
+    @Test
     void removeFirstTakesTheOldestOrderOutOfTheLine() {
         PriceLevel level = new PriceLevel(4000);
         Order ravi = sell(1, 50);

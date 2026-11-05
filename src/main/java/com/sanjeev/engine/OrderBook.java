@@ -138,8 +138,8 @@ public final class OrderBook {
         return sideOf(side).get(priceInPaise);
     }
 
-    /** The resting order with this id, or null. O(1). Package-private: for the engine. */
-    Order restingOrder(long orderId) {
+    /** The resting order with this id, or null if it is not resting. O(1). */
+    public Order restingOrder(long orderId) {
         return index.get(orderId);
     }
 
@@ -163,8 +163,8 @@ public final class OrderBook {
         return index.size();
     }
 
-    /** Counts resting orders by walking the real price levels, ignoring the index. For tests. */
-    int restingOrderCount() {
+    /** Counts resting orders by walking the real price levels, ignoring the index. O(P). */
+    public int restingOrderCount() {
         int count = 0;
         for (PriceLevel level : bids.values()) {
             count += level.size();

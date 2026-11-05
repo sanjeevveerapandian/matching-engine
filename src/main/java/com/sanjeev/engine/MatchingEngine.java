@@ -33,6 +33,7 @@ public final class MatchingEngine {
      */
     public List<Trade> submitLimit(Order incoming) {
         validate(incoming, OrderType.LIMIT);
+        requireQueueOrder(incoming);
         lastSequence = Math.max(lastSequence, incoming.getSequence());
 
         if (incoming.getTimeInForce() == TimeInForce.FOK
@@ -115,6 +116,14 @@ public final class MatchingEngine {
         return submitLimit(replacement);
     }
 
+    /**
+     * The next arrival number. Create every order with a number from here, so that arrival
+     * numbers never clash with the ones the engine hands out itself (modify re-submits).
+     */
+    public long nextSequence() {
+        return ++lastSequence;
+    }
+
     /** Read access to the book (for printing and tests). */
     public OrderBook book() {
         return book;
@@ -177,6 +186,25 @@ public final class MatchingEngine {
         }
         if (book.contains(incoming.getId())) {
             throw new IllegalArgumentException("duplicate order id " + incoming.getId());
+        }
+    }
+
+    /**
+     * Time priority is the order of arrival numbers inside a price level, so a GTC order
+     * (the only kind that can rest) must have a number greater than the newest order already
+     * queued at its price. Checked BEFORE matching, so a rejected order changes nothing.
+     * Matching only touches the opposite side, so this level cannot change in between.
+     */
+    private void requireQueueOrder(Order incoming) {
+        if (incoming.getTimeInForce() != TimeInForce.GTC) {
+            return; // IOC and FOK never rest
+        }
+        PriceLevel sameLevel = book.levelAt(incoming.getSide(), incoming.getPriceInPaise());
+        if (sameLevel != null && sameLevel.peekLast().getSequence() >= incoming.getSequence()) {
+            throw new IllegalArgumentException("sequence " + incoming.getSequence()
+                    + " is not greater than " + sameLevel.peekLast().getSequence()
+                    + ", the newest order queued at " + incoming.getPriceInPaise()
+                    + "; take numbers from nextSequence()");
         }
     }
 

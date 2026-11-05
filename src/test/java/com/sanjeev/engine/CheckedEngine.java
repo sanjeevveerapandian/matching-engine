@@ -28,6 +28,10 @@ final class CheckedEngine {
         return checked(() -> engine.modify(orderId, newPrice, newQuantity));
     }
 
+    long nextSequence() {
+        return engine.nextSequence();
+    }
+
     OrderBook book() {
         return engine.book();
     }
