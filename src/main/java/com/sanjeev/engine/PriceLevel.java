@@ -44,6 +44,16 @@ public final class PriceLevel {
         return queue.pollFirst();
     }
 
+    /**
+     * Take a specific order out of the line, wherever it stands, keeping everyone else's
+     * order. O(k), k = orders at this price (the queue is scanned from the front).
+     *
+     * @return true if the order was in this level
+     */
+    public boolean remove(Order order) {
+        return queue.remove(order);
+    }
+
     /** Sum of the unfilled quantity of every order here. O(n) in orders at this price. */
     public long totalQuantity() {
         long total = 0;

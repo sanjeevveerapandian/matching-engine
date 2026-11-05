@@ -2,6 +2,7 @@ package com.sanjeev.engine;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -13,7 +14,9 @@ import java.util.TreeMap;
  * willing to pay the most. Asks (sellers) are sorted LOWEST price first, because the
  * best seller is the cheapest. So in both maps, the first entry is the "best" price.
  *
- * <p>This phase only rests orders. Matching comes later.
+ * <p>Besides the two price maps there is an INDEX: order id -> order, for every resting
+ * order. It lets us find any order instantly by id (needed to cancel). Rule: the index
+ * holds exactly the orders that are resting, no more, no fewer.
  */
 public final class OrderBook {
 
@@ -22,14 +25,60 @@ public final class OrderBook {
 
     private final TreeMap<Long, PriceLevel> bids = new TreeMap<>(Comparator.reverseOrder());
     private final TreeMap<Long, PriceLevel> asks = new TreeMap<>();
+    private final Map<Long, Order> index = new HashMap<>();
 
-    /** Put an order on the book. No matching. O(log P), P = number of price levels. */
+    /**
+     * Put a LIMIT order on the book. No matching. O(log P), P = number of price levels.
+     *
+     * @throws IllegalArgumentException if null, not a limit order, or its id is already resting
+     */
     public void addResting(Order order) {
         if (order == null) {
             throw new IllegalArgumentException("order must not be null");
         }
-        TreeMap<Long, PriceLevel> side = sideOf(order.getSide());
-        side.computeIfAbsent(order.getPriceInPaise(), PriceLevel::new).add(order);
+        if (order.getType() != OrderType.LIMIT) {
+            throw new IllegalArgumentException("only limit orders can rest on the book");
+        }
+        if (index.containsKey(order.getId())) {
+            throw new IllegalArgumentException("duplicate order id " + order.getId());
+        }
+        sideOf(order.getSide()).computeIfAbsent(order.getPriceInPaise(), PriceLevel::new).add(order);
+        index.put(order.getId(), order);
+    }
+
+    /** Is an order with this id resting on the book right now? O(1). */
+    public boolean contains(long orderId) {
+        return index.containsKey(orderId);
+    }
+
+    /**
+     * Cancel a resting order.
+     *
+     * @return true if it was resting and is now removed; false if the id is unknown or the
+     *         order is no longer resting (already filled or already cancelled)
+     */
+    public boolean cancel(long orderId) {
+        Order order = index.get(orderId); // O(1): no scanning of the book
+        if (order == null) {
+            return false;
+        }
+        removeResting(order);
+        return true;
+    }
+
+    /**
+     * Remove a resting order from its level, the level if it became empty, and the index.
+     * Used for cancels and for orders that were completely filled.
+     */
+    void removeResting(Order order) {
+        Side side = order.getSide();
+        long price = order.getPriceInPaise();
+        PriceLevel level = sideOf(side).get(price);
+        if (level == null || !level.remove(order)) {
+            throw new IllegalStateException("index out of sync with book for " + order);
+        }
+        removeLevelIfEmpty(side, price);
+        index.remove(order.getId());
     }
 
     /** Highest buy price, or null if there are no bids. O(log P). */
@@ -85,6 +134,23 @@ public final class OrderBook {
     /** The queue at one exact price, or null if none. Package-private: for tests, not for callers. */
     PriceLevel levelAt(Side side, long priceInPaise) {
         return sideOf(side).get(priceInPaise);
+    }
+
+    /** How many entries the index holds. Package-private: for tests. */
+    int indexSize() {
+        return index.size();
+    }
+
+    /** Counts resting orders by walking the real price levels, ignoring the index. For tests. */
+    int restingOrderCount() {
+        int count = 0;
+        for (PriceLevel level : bids.values()) {
+            count += level.size();
+        }
+        for (PriceLevel level : asks.values()) {
+            count += level.size();
+        }
+        return count;
     }
 
     /** Which map holds this side. */

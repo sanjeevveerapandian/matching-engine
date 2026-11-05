@@ -1,6 +1,7 @@
 package com.sanjeev.engine;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -80,6 +81,33 @@ class PriceLevelTest {
 
         assertNull(level.peekFirst());
         assertNull(level.removeFirst());
+    }
+
+    @Test
+    void removingAnOrderFromTheMiddleKeepsTheOthersInArrivalOrder() {
+        PriceLevel level = new PriceLevel(4000);
+        Order first = sell(1, 10);
+        Order middle = sell(2, 10);
+        Order last = sell(3, 10);
+        level.add(first);
+        level.add(middle);
+        level.add(last);
+
+        assertTrue(level.remove(middle));
+
+        List<Order> inLine = new ArrayList<>();
+        level.orders().forEach(inLine::add);
+        assertEquals(List.of(first, last), inLine);
+    }
+
+    @Test
+    void removingAnOrderThatIsNotInTheLevelReturnsFalseAndChangesNothing() {
+        PriceLevel level = new PriceLevel(4000);
+        level.add(sell(1, 10));
+
+        assertFalse(level.remove(sell(2, 10)));
+
+        assertEquals(1, level.size());
     }
 
     @Test

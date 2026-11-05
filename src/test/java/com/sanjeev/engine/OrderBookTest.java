@@ -1,6 +1,7 @@
 package com.sanjeev.engine;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -90,6 +91,46 @@ class OrderBookTest {
         book.bestLevel(Side.SELL).removeFirst();
         book.removeLevelIfEmpty(Side.SELL, 3100);
         assertEquals(3200L, book.bestAsk());
+    }
+
+    @Test
+    void bookRefusesAMarketOrderBecauseItCannotRest() {
+        Order market = Order.market(1, "Anu", Side.BUY, 10, 1);
+
+        assertThrows(IllegalArgumentException.class, () -> book.addResting(market));
+        assertEquals(0, book.indexSize());
+    }
+
+    @Test
+    void bookRefusesASecondRestingOrderWithTheSameId() {
+        book.addResting(new Order(7, Side.SELL, 3000, 10, 1));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> book.addResting(new Order(7, Side.BUY, 2900, 5, 2)));
+
+        assertEquals(1, book.indexSize());
+        assertNull(book.bestBid());
+    }
+
+    @Test
+    void containsIsTrueOnlyWhileTheOrderIsResting() {
+        Order ravi = rest(Side.SELL, 3000, 10);
+
+        assertTrue(book.contains(ravi.getId()));
+
+        book.cancel(ravi.getId());
+
+        assertFalse(book.contains(ravi.getId()));
+    }
+
+    @Test
+    void restingOrdersAreAddedToTheIndexAndCountedOnTheBook() {
+        rest(Side.SELL, 3000, 10);
+        rest(Side.SELL, 3000, 10);
+        rest(Side.BUY, 2900, 10);
+
+        assertEquals(3, book.indexSize());
+        assertEquals(3, book.restingOrderCount());
     }
 
     @Test

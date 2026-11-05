@@ -109,6 +109,45 @@ class OrderTest {
     }
 
     @Test
+    void ordersCreatedWithAPriceAreLimitOrders() {
+        assertEquals(OrderType.LIMIT, sellTomatoes(50).getType());
+    }
+
+    @Test
+    void marketOrderHasMarketTypeAndKeepsItsOtherDetails() {
+        Order anu = Order.market(5, "Anu", Side.BUY, 20, 9);
+
+        assertEquals(OrderType.MARKET, anu.getType());
+        assertEquals("Anu", anu.getTrader());
+        assertEquals(Side.BUY, anu.getSide());
+        assertEquals(20, anu.getRemainingQuantity());
+        assertEquals(9, anu.getSequence());
+    }
+
+    @Test
+    void marketOrderHasNoPriceSoAskingForOneFails() {
+        Order anu = Order.market(5, "Anu", Side.BUY, 20, 9);
+
+        assertThrows(IllegalStateException.class, anu::getPriceInPaise);
+    }
+
+    @Test
+    void marketOrderCanBePartlyFilledLikeAnyOtherOrder() {
+        Order anu = Order.market(5, "Anu", Side.BUY, 20, 9);
+
+        anu.fill(8);
+
+        assertEquals(12, anu.getRemainingQuantity());
+    }
+
+    @Test
+    void marketOrderStillNeedsAPositiveQuantityASideAndATraderName() {
+        assertThrows(IllegalArgumentException.class, () -> Order.market(1, "Anu", Side.BUY, 0, 1));
+        assertThrows(IllegalArgumentException.class, () -> Order.market(1, "Anu", null, 10, 1));
+        assertThrows(IllegalArgumentException.class, () -> Order.market(1, " ", Side.BUY, 10, 1));
+    }
+
+    @Test
     void buyAndSellAreOppositesOfEachOther() {
         assertEquals(Side.SELL, Side.BUY.opposite());
         assertEquals(Side.BUY, Side.SELL.opposite());
