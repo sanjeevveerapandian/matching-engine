@@ -1,4 +1,4 @@
-# Matching Engine: rules for Claude
+# Matching Engine: project rules
 
 ## What this project is
 A stock exchange matching engine in Java 21 + Maven, built in phases as a portfolio project.
@@ -28,7 +28,7 @@ I am Sanjeev, a fresher preparing for SDE-1 interviews. I must understand every 
 
   Phase N: short description
 
-  Do NOT add any Co-Authored-By or other Claude attribution line.
+  Do NOT add any Co-Authored-By or other attribution line.
 
 - Never push. I push myself.
 - Never create or edit NOTES.md. I write it myself.
