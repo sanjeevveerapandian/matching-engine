@@ -116,6 +116,102 @@ public final class MatchingEngine {
         return submitLimit(replacement);
     }
 
+    // ------------------------------------------------------------------------------------
+    // Event-returning API. These wrap the methods above: same rules, but the caller gets a
+    // list of facts (Event) instead of only trades, and a refused command comes back as an
+    // OrderRejected event instead of an exception, so one bad command cannot crash the caller.
+    // ------------------------------------------------------------------------------------
+
+    /**
+     * Like {@link #submitLimit}, but returns events: OrderAccepted, then a TradeExecuted per
+     * trade, then (for IOC/FOK leftovers) an OrderCancelled. A refused order yields a single
+     * OrderRejected.
+     */
+    public List<Event> processLimit(Order incoming) {
+        return process(incoming, OrderType.LIMIT);
+    }
+
+    /** Like {@link #submitMarket}, but returns events. See {@link #processLimit}. */
+    public List<Event> processMarket(Order incoming) {
+        return process(incoming, OrderType.MARKET);
+    }
+
+    /** Like {@link #cancel}, but returns OrderCancelled, or OrderRejected if nothing was resting. */
+    public List<Event> processCancel(long orderId) {
+        Order live = book.restingOrder(orderId);
+        if (live == null) {
+            return List.of(new Event.OrderRejected(orderId,
+                    "order " + orderId + " is not resting on the book"));
+        }
+        long remaining = live.getRemainingQuantity();
+        book.cancel(orderId);
+        return List.of(new Event.OrderCancelled(orderId, remaining, CancelReason.REQUESTED));
+    }
+
+    /**
+     * Like {@link #modify}, but returns OrderModified followed by any TradeExecuted events, or
+     * OrderRejected (the order is left exactly as it was) if the request is invalid.
+     */
+    public List<Event> processModify(long orderId, long newPrice, long newQuantity) {
+        Order before = book.restingOrder(orderId);
+        if (before == null) {
+            return List.of(new Event.OrderRejected(orderId,
+                    "order " + orderId + " is not resting on the book"));
+        }
+        long oldPrice = before.getPriceInPaise();
+        long oldRemaining = before.getRemainingQuantity();
+
+        List<Trade> trades;
+        try {
+            trades = modify(orderId, newPrice, newQuantity);
+        } catch (IllegalArgumentException e) {
+            return List.of(new Event.OrderRejected(orderId, e.getMessage()));
+        }
+
+        boolean keptPriority = newPrice == oldPrice && newQuantity <= oldRemaining;
+        List<Event> events = new ArrayList<>();
+        events.add(new Event.OrderModified(orderId, newPrice, newQuantity, keptPriority));
+        addTradeEvents(events, trades);
+        return events;
+    }
+
+    private List<Event> process(Order incoming, OrderType expected) {
+        List<Trade> trades;
+        try {
+            trades = expected == OrderType.LIMIT ? submitLimit(incoming) : submitMarket(incoming);
+        } catch (IllegalArgumentException e) {
+            long id = incoming == null ? -1 : incoming.getId();
+            return List.of(new Event.OrderRejected(id, e.getMessage()));
+        }
+
+        List<Event> events = new ArrayList<>();
+        events.add(new Event.OrderAccepted(
+                incoming.getId(),
+                incoming.getTrader(),
+                incoming.getSide(),
+                incoming.getType(),
+                incoming.getTimeInForce(),
+                incoming.getType() == OrderType.MARKET ? null : incoming.getPriceInPaise(),
+                incoming.getOriginalQuantity(),
+                incoming.getSequence()));
+        addTradeEvents(events, trades);
+
+        long leftover = incoming.getRemainingQuantity();
+        if (leftover > 0 && !book.contains(incoming.getId())) { // quantity left, and it did not rest
+            CancelReason reason = incoming.getTimeInForce() == TimeInForce.FOK
+                    ? CancelReason.FOK_NOT_FILLABLE
+                    : CancelReason.UNFILLED_REMAINDER;
+            events.add(new Event.OrderCancelled(incoming.getId(), leftover, reason));
+        }
+        return events;
+    }
+
+    private static void addTradeEvents(List<Event> events, List<Trade> trades) {
+        for (Trade trade : trades) {
+            events.add(new Event.TradeExecuted(trade));
+        }
+    }
+
     /**
      * The next arrival number. Create every order with a number from here, so that arrival
      * numbers never clash with the ones the engine hands out itself (modify re-submits).
