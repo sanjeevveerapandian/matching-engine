@@ -1,10 +1,13 @@
 package com.sanjeev.engine;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -156,6 +159,68 @@ public final class OrderBook {
     /** The real index map. Package-private: for BookInvariants and tests ONLY. */
     Map<Long, Order> rawIndex() {
         return index;
+    }
+
+    /**
+     * A stable fingerprint of the book, so two books can be compared by comparing two strings.
+     *
+     * <p>It is SHA-256 over every resting order in book order (bids best price first, then asks
+     * best price first, each level oldest order first). For each side: the number of orders,
+     * then for each order its id, side, price, remaining quantity and sequence number. Every
+     * number is written as 8 bytes, big-endian, so the result does not depend on the machine,
+     * the JVM or Java's {@code hashCode}. Same resting orders in the same order give the same
+     * hash; change any of those five fields, or the queue order, and the hash changes.
+     *
+     * <p>It does NOT cover the trader name or the original quantity, nor the engine's counters;
+     * {@link EngineSnapshot} carries those. O(N) in resting orders.
+     *
+     * @return 64 lowercase hex characters
+     */
+    public String stateHash() {
+        MessageDigest digest;
+        try {
+            digest = MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("every Java platform must provide SHA-256", e);
+        }
+        for (Side side : Side.values()) {
+            long count = 0;
+            for (PriceLevel level : sideOf(side).values()) {
+                count += level.size();
+            }
+            putLong(digest, count);
+            for (PriceLevel level : sideOf(side).values()) {
+                for (Order order : level.orders()) {
+                    putLong(digest, order.getId());
+                    digest.update((byte) order.getSide().ordinal());
+                    putLong(digest, order.getPriceInPaise());
+                    putLong(digest, order.getRemainingQuantity());
+                    putLong(digest, order.getSequence());
+                }
+            }
+        }
+        return HexFormat.of().formatHex(digest.digest());
+    }
+
+    private static void putLong(MessageDigest digest, long value) {
+        for (int shift = 56; shift >= 0; shift -= 8) {
+            digest.update((byte) (value >>> shift));
+        }
+    }
+
+    /** Every resting order in book order, for snapshots. */
+    List<EngineSnapshot.OrderState> orderStates() {
+        List<EngineSnapshot.OrderState> states = new ArrayList<>();
+        for (Side side : Side.values()) {
+            for (PriceLevel level : sideOf(side).values()) {
+                for (Order order : level.orders()) {
+                    states.add(new EngineSnapshot.OrderState(order.getId(), order.getTrader(),
+                            order.getSide(), order.getPriceInPaise(), order.getOriginalQuantity(),
+                            order.getRemainingQuantity(), order.getSequence()));
+                }
+            }
+        }
+        return states;
     }
 
     /** How many entries the index holds. Package-private: for tests. */

@@ -67,6 +67,24 @@ public final class Order {
         return new Order(id, trader, OrderType.MARKET, TimeInForce.IOC, side, NO_PRICE, quantity, sequence);
     }
 
+    /**
+     * Rebuild a resting order from a snapshot: a GTC limit order that may already be partly
+     * filled. Package-private: only {@link MatchingEngine#restore} uses it.
+     *
+     * @throws IllegalArgumentException unless {@code 0 < remaining <= original}
+     */
+    static Order restored(long id, String trader, Side side, long priceInPaise,
+                          long originalQuantity, long remainingQuantity, long sequence) {
+        if (remainingQuantity <= 0 || remainingQuantity > originalQuantity) {
+            throw new IllegalArgumentException("remaining quantity " + remainingQuantity
+                    + " must be between 1 and the original quantity " + originalQuantity);
+        }
+        Order order = new Order(id, trader, OrderType.LIMIT, TimeInForce.GTC, side,
+                priceInPaise, originalQuantity, sequence);
+        order.remainingQuantity = remainingQuantity;
+        return order;
+    }
+
     private Order(long id, String trader, OrderType type, TimeInForce timeInForce, Side side,
                   long priceInPaise, long quantity, long sequence) {
         if (trader == null || trader.isBlank()) {

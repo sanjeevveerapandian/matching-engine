@@ -38,6 +38,15 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.2.5</version>
             </plugin>
+            <!-- Only used by:  mvn compile exec:java   (runs the crash-recovery demo; not part of the build) -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <configuration>
+                    <mainClass>com.sanjeev.sim.CrashRecoveryDemo</mainClass>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 </project>

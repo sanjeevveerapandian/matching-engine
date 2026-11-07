@@ -220,6 +220,45 @@ public final class MatchingEngine {
         return ++lastSequence;
     }
 
+    /**
+     * Capture the whole engine state as a plain value. O(N) in resting orders. Must be called
+     * from the thread that runs the engine.
+     */
+    public EngineSnapshot snapshot() {
+        return new EngineSnapshot(nextTradeId, lastSequence, book.orderStates());
+    }
+
+    /**
+     * Build a new engine in exactly the state a snapshot describes. The result behaves as if
+     * it had processed every command that led to that snapshot.
+     *
+     * @throws IllegalArgumentException if the snapshot is inconsistent (bad quantities, a
+     *         duplicate id, or an order newer than the engine's last sequence number)
+     */
+    public static MatchingEngine restore(EngineSnapshot snapshot) {
+        if (snapshot == null) {
+            throw new IllegalArgumentException("snapshot must not be null");
+        }
+        if (snapshot.nextTradeId() < 1) {
+            throw new IllegalArgumentException("next trade id must be at least 1, got "
+                    + snapshot.nextTradeId());
+        }
+        MatchingEngine engine = new MatchingEngine();
+        engine.nextTradeId = snapshot.nextTradeId();
+        engine.lastSequence = snapshot.lastArrivalSequence();
+        for (EngineSnapshot.OrderState state : snapshot.orders()) {
+            if (state.sequence() > snapshot.lastArrivalSequence()) {
+                throw new IllegalArgumentException("order " + state.id() + " has sequence "
+                        + state.sequence() + " beyond the engine's last sequence "
+                        + snapshot.lastArrivalSequence());
+            }
+            engine.book.addResting(Order.restored(state.id(), state.trader(), state.side(),
+                    state.priceInPaise(), state.originalQuantity(), state.remainingQuantity(),
+                    state.sequence()));
+        }
+        return engine;
+    }
+
     /** Read access to the book (for printing and tests). */
     public OrderBook book() {
         return book;

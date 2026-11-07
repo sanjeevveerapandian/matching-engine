@@ -49,18 +49,48 @@ public final class Sequencer {
     private final ReentrantReadWriteLock gate = new ReentrantReadWriteLock();
     private boolean closed; // guarded by gate
 
-    private long lastSequence;          // engine thread only
-    private volatile Throwable failure; // set by the engine thread, read by producers
+    /** How often (in commands) a snapshot is taken unless you say otherwise. */
+    public static final long DEFAULT_SNAPSHOT_EVERY = 10_000;
+
+    private final SnapshotStore snapshots;       // null = no snapshots
+    private final long snapshotEvery;
+
+    private long lastSequence;                   // engine thread only
+    private volatile Throwable failure;          // set by the engine thread, read by producers
+    private volatile IOException snapshotFailure; // the latest snapshot that could not be written
 
     /**
+     * A sequencer that takes no snapshots.
+     *
      * @param queueCapacity how many commands may wait; when full, producers wait (back-pressure)
      */
     public Sequencer(MatchingEngine engine, EventLog log, EventPublisher publisher, int queueCapacity) {
+        this(engine, log, publisher, queueCapacity, null, DEFAULT_SNAPSHOT_EVERY);
+    }
+
+    /** A sequencer that snapshots every {@link #DEFAULT_SNAPSHOT_EVERY} commands. */
+    public Sequencer(MatchingEngine engine, EventLog log, EventPublisher publisher, int queueCapacity,
+                     SnapshotStore snapshots) {
+        this(engine, log, publisher, queueCapacity, snapshots, DEFAULT_SNAPSHOT_EVERY);
+    }
+
+    /**
+     * @param snapshots     where snapshots go, or null for none
+     * @param snapshotEvery take a snapshot after every this-many commands (sequence 10000, 20000,
+     *                      ... when 10000); must be positive
+     */
+    public Sequencer(MatchingEngine engine, EventLog log, EventPublisher publisher, int queueCapacity,
+                     SnapshotStore snapshots, long snapshotEvery) {
+        if (snapshotEvery <= 0) {
+            throw new IllegalArgumentException("snapshotEvery must be positive, got " + snapshotEvery);
+        }
         this.engine = engine;
         this.processor = new CommandProcessor(engine);
         this.log = log;
         this.publisher = publisher;
         this.queue = new ArrayBlockingQueue<>(queueCapacity);
+        this.snapshots = snapshots;
+        this.snapshotEvery = snapshotEvery;
     }
 
     /** Start the engine thread. Call once. */
@@ -140,6 +170,9 @@ public final class Sequencer {
                 log.append(sequence, command);                           // 1. write-ahead
                 List<Event> events = processor.apply(sequence, command); // 2. apply
                 publisher.publish(sequence, events);                     // 3. publish
+                if (snapshots != null && sequence % snapshotEvery == 0) {
+                    takeSnapshot(sequence);                              // 4. now and then, a snapshot
+                }
             }
         } catch (InterruptedException e) {
             failure = new IllegalStateException("engine thread was interrupted", e);
@@ -156,6 +189,24 @@ public final class Sequencer {
                 }
             }
         }
+    }
+
+    /**
+     * A snapshot is only a shortcut for recovery (the log is the truth), so failing to write one
+     * is NOT fatal: we remember the error and keep going. Taken on the engine thread, so it
+     * pauses processing for the time it takes to write the file.
+     */
+    private void takeSnapshot(long sequence) {
+        try {
+            snapshots.write(sequence, engine);
+        } catch (IOException e) {
+            snapshotFailure = e;
+        }
+    }
+
+    /** The most recent snapshot error, if any snapshot could not be written. */
+    public Optional<IOException> lastSnapshotFailure() {
+        return Optional.ofNullable(snapshotFailure);
     }
 
     private void throwIfFailed() {
