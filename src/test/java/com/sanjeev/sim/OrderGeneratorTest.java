@@ -1,11 +1,13 @@
 package com.sanjeev.sim;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.sanjeev.engine.Order;
 import com.sanjeev.engine.OrderBook;
 import com.sanjeev.engine.OrderType;
+import com.sanjeev.engine.Side;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
@@ -61,6 +63,90 @@ class OrderGeneratorTest {
                         && order.getPriceInPaise() <= OrderGenerator.MAX_PRICE);
             }
         }
+    }
+
+    private static List<Long> limitPrices(int priceNoise, int count) {
+        OrderGenerator generator = new OrderGenerator(4, new OrderBook(), new AtomicLong()::incrementAndGet, priceNoise);
+        List<Long> prices = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            if (generator.next() instanceof Operation.SubmitLimit limit) {
+                prices.add(limit.order().getPriceInPaise());
+            }
+        }
+        return prices;
+    }
+
+    @Test
+    void aSmallPriceNoiseKeepsPricesNextToTheMidOfAnEmptyBook() {
+        for (long price : limitPrices(1, 5_000)) {
+            assertTrue(price >= 2999 && price <= 3001, "price " + price);
+        }
+    }
+
+    @Test
+    void aBiggerPriceNoiseSpreadsPricesOverMoreLevelsButStaysInTheBand() {
+        List<Long> narrow = limitPrices(5, 5_000);
+        List<Long> wide = limitPrices(150, 5_000);
+
+        assertTrue(wide.stream().distinct().count() > narrow.stream().distinct().count());
+        for (long price : wide) {
+            assertTrue(price >= OrderGenerator.MIN_PRICE && price <= OrderGenerator.MAX_PRICE);
+        }
+    }
+
+    @Test
+    void thePriceNoiseMustBePositive() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new OrderGenerator(1, new OrderBook(), () -> 1, 0));
+        assertThrows(IllegalArgumentException.class,
+                () -> new OrderGenerator(1, new OrderBook(), () -> 1, -3));
+    }
+
+    @Test
+    void theThreeArgumentConstructorKeepsTheOriginalDefaultNoise() {
+        OrderGenerator defaulted = new OrderGenerator(8, new OrderBook(), new AtomicLong()::incrementAndGet);
+        OrderGenerator explicit = new OrderGenerator(8, new OrderBook(), new AtomicLong()::incrementAndGet,
+                OrderGenerator.PRICE_NOISE);
+
+        for (int i = 0; i < 500; i++) {
+            assertEquals(defaulted.next().toString(), explicit.next().toString());
+        }
+    }
+
+    @Test
+    void whenEveryOrderIsPassiveBuysAreBelowTheMidAndSellsAboveItOnAnEmptyBook() {
+        OrderGenerator generator = new OrderGenerator(6, new OrderBook(), new AtomicLong()::incrementAndGet, 150, 100);
+        int checked = 0;
+        for (int i = 0; i < 5_000; i++) {
+            if (generator.next() instanceof Operation.SubmitLimit limit) {
+                Order order = limit.order();
+                if (order.getSide() == Side.BUY) {
+                    assertTrue(order.getPriceInPaise() < 3000, "buy at " + order.getPriceInPaise());
+                } else {
+                    assertTrue(order.getPriceInPaise() > 3000, "sell at " + order.getPriceInPaise());
+                }
+                checked++;
+            }
+        }
+        assertTrue(checked > 1_000);
+    }
+
+    @Test
+    void withNoPassiveOrdersTheFiveArgumentConstructorMatchesTheFourArgumentOne() {
+        OrderGenerator four = new OrderGenerator(8, new OrderBook(), new AtomicLong()::incrementAndGet, 40);
+        OrderGenerator five = new OrderGenerator(8, new OrderBook(), new AtomicLong()::incrementAndGet, 40, 0);
+
+        for (int i = 0; i < 500; i++) {
+            assertEquals(four.next().toString(), five.next().toString());
+        }
+    }
+
+    @Test
+    void thePassivePercentMustBeBetweenZeroAndOneHundred() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new OrderGenerator(1, new OrderBook(), () -> 1, 40, -1));
+        assertThrows(IllegalArgumentException.class,
+                () -> new OrderGenerator(1, new OrderBook(), () -> 1, 40, 101));
     }
 
     @Test

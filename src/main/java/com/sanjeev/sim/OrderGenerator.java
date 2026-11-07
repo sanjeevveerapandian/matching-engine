@@ -33,6 +33,8 @@ public final class OrderGenerator {
     /** Ids of GTC orders that may still be resting; dead ones are dropped when noticed. */
     private final List<Long> maybeLive = new ArrayList<>();
     private final LongSupplier sequences;
+    private final int priceNoise;
+    private final int passivePercent;
     private long nextOrderId = 1;
 
     /**
@@ -40,9 +42,37 @@ public final class OrderGenerator {
      *                  so our numbers never clash with the ones the engine hands out itself
      */
     public OrderGenerator(long seed, OrderBook book, LongSupplier sequences) {
+        this(seed, book, sequences, PRICE_NOISE);
+    }
+
+    /**
+     * @param priceNoise how far (in paise) a new order's price may land from the current mid;
+     *                   a bigger value spreads orders over more price levels and gives a deeper book
+     */
+    public OrderGenerator(long seed, OrderBook book, LongSupplier sequences, int priceNoise) {
+        this(seed, book, sequences, priceNoise, 0);
+    }
+
+    /**
+     * @param passivePercent the share (0 to 100) of new limit orders that are PASSIVE: a buy is
+     *                       priced below the mid and a sell above it, 1 to {@code priceNoise}
+     *                       paise away, so it rests instead of trading. Real order flow is mostly
+     *                       passive; with 0 (the default) prices fall on either side of the mid
+     *                       and most orders cross at once, which keeps the book almost empty.
+     */
+    public OrderGenerator(long seed, OrderBook book, LongSupplier sequences, int priceNoise,
+                          int passivePercent) {
+        if (priceNoise < 1) {
+            throw new IllegalArgumentException("priceNoise must be at least 1, got " + priceNoise);
+        }
+        if (passivePercent < 0 || passivePercent > 100) {
+            throw new IllegalArgumentException("passivePercent must be 0 to 100, got " + passivePercent);
+        }
         this.random = new Random(seed);
         this.book = book;
         this.sequences = sequences;
+        this.priceNoise = priceNoise;
+        this.passivePercent = passivePercent;
     }
 
     /** The next operation. Never returns null. */
@@ -64,8 +94,11 @@ public final class OrderGenerator {
     private Order newLimitOrder() {
         long id = nextOrderId++;
         TimeInForce tif = pickTimeInForce();
-        Order order = Order.limit(id, randomTrader(), randomSide(), quotePrice(), randomQuantity(),
-                sequences.getAsLong(), tif);
+        String trader = randomTrader();
+        Side side = randomSide();
+        long price = quotePrice(side);
+        long quantity = randomQuantity();
+        Order order = Order.limit(id, trader, side, price, quantity, sequences.getAsLong(), tif);
         if (tif == TimeInForce.GTC) {
             maybeLive.add(id);
         }
@@ -88,7 +121,7 @@ public final class OrderGenerator {
         if (kind < 7) {                                        // bigger, same price
             return new Operation.Modify(orderId, price, remaining + 1 + random.nextInt(50));
         }
-        return new Operation.Modify(orderId, quotePrice(), randomQuantity()); // new price
+        return new Operation.Modify(orderId, quotePrice(live.getSide()), randomQuantity()); // new price
     }
 
     /** A random order id that is resting right now, or empty if there is none. */
@@ -106,10 +139,21 @@ public final class OrderGenerator {
         return OptionalLong.empty();
     }
 
-    /** Near the current mid price, clamped to the allowed band. */
-    private long quotePrice() {
+    /**
+     * Near the current mid price, clamped to the allowed band. A passive order (see the
+     * constructor) goes on its own side of the mid; others land on either side. With
+     * {@code passivePercent == 0} no extra random number is drawn, so the stream of operations
+     * is exactly what it always was.
+     */
+    private long quotePrice(Side side) {
         long mid = currentMid();
-        long price = mid + random.nextInt(2 * PRICE_NOISE + 1) - PRICE_NOISE;
+        long price;
+        if (passivePercent > 0 && random.nextInt(100) < passivePercent) {
+            long away = 1 + random.nextInt(priceNoise);
+            price = side == Side.BUY ? mid - away : mid + away;
+        } else {
+            price = mid + random.nextInt(2 * priceNoise + 1) - priceNoise;
+        }
         return Math.max(MIN_PRICE, Math.min(MAX_PRICE, price));
     }
 

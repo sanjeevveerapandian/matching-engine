@@ -1,0 +1,471 @@
+﻿# JMH version: 1.37
+# VM version: JDK 21.0.12.1, Java HotSpot(TM) 64-Bit Server VM, 21.0.12.1+1-LTS-4
+# VM invoker: C:\Program Files\Java\jdk-21.0.12.1\bin\java.exe
+# VM options: -Xms1g -Xmx1g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 2 s each
+# Measurement: 10 iterations, 2 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Throughput, ops/time
+# Benchmark: com.sanjeev.bench.ThroughputBenchmark.processTheMix
+
+# Run progress: 0.00% complete, ETA 00:03:00
+# Fork: 1 of 3
+# Warmup Iteration   1: 4280372.473 ops/s
+# Warmup Iteration   2: 5197981.520 ops/s
+# Warmup Iteration   3: 5156272.768 ops/s
+# Warmup Iteration   4: 5052090.663 ops/s
+# Warmup Iteration   5: 4334184.908 ops/s
+Iteration   1: 4692353.687 ops/s
+Iteration   2: 5095942.753 ops/s
+Iteration   3: 4213940.536 ops/s
+Iteration   4: 4207179.160 ops/s
+Iteration   5: 4013673.818 ops/s
+Iteration   6: 4994495.394 ops/s
+Iteration   7: 4796854.286 ops/s
+Iteration   8: 3850333.449 ops/s
+Iteration   9: 3556791.753 ops/s
+Iteration  10: 4647724.843 ops/s
+
+# Run progress: 16.67% complete, ETA 00:02:33
+# Fork: 2 of 3
+# Warmup Iteration   1: 3821100.374 ops/s
+# Warmup Iteration   2: 3823332.552 ops/s
+# Warmup Iteration   3: 4907849.150 ops/s
+# Warmup Iteration   4: 3587041.071 ops/s
+# Warmup Iteration   5: 4689047.523 ops/s
+Iteration   1: 5146102.529 ops/s
+Iteration   2: 5142752.547 ops/s
+Iteration   3: 5249706.798 ops/s
+Iteration   4: 3856775.426 ops/s
+Iteration   5: 4759026.406 ops/s
+Iteration   6: 5320355.996 ops/s
+Iteration   7: 5277912.827 ops/s
+Iteration   8: 4774241.450 ops/s
+Iteration   9: 5242055.384 ops/s
+Iteration  10: 5238780.848 ops/s
+
+# Run progress: 33.33% complete, ETA 00:02:02
+# Fork: 3 of 3
+# Warmup Iteration   1: 4562025.121 ops/s
+# Warmup Iteration   2: 5268646.418 ops/s
+# Warmup Iteration   3: 5031907.648 ops/s
+# Warmup Iteration   4: 5194206.590 ops/s
+# Warmup Iteration   5: 5278228.697 ops/s
+Iteration   1: 5231823.816 ops/s
+Iteration   2: 4093668.022 ops/s
+Iteration   3: 4803085.477 ops/s
+Iteration   4: 4089381.527 ops/s
+Iteration   5: 4710378.948 ops/s
+Iteration   6: 5323615.804 ops/s
+Iteration   7: 5232830.962 ops/s
+Iteration   8: 5329737.537 ops/s
+Iteration   9: 5326568.680 ops/s
+Iteration  10: 5259607.702 ops/s
+
+
+Result "com.sanjeev.bench.ThroughputBenchmark.processTheMix":
+  4782589.946 ±(99.9%) 362972.034 ops/s [Average]
+  (min, avg, max) = (3556791.753, 4782589.946, 5329737.537), stdev = 543279.493
+  CI (99.9%): [4419617.912, 5145561.979] (assumes normal distribution)
+
+
+# JMH version: 1.37
+# VM version: JDK 21.0.12.1, Java HotSpot(TM) 64-Bit Server VM, 21.0.12.1+1-LTS-4
+# VM invoker: C:\Program Files\Java\jdk-21.0.12.1\bin\java.exe
+# VM options: -Xms1g -Xmx1g
+# Blackhole mode: compiler (auto-detected, use -Djmh.blackhole.autoDetect=false to disable)
+# Warmup: 5 iterations, 2 s each
+# Measurement: 10 iterations, 2 s each
+# Timeout: 10 min per iteration
+# Threads: 1 thread, will synchronize iterations
+# Benchmark mode: Sampling time
+# Benchmark: com.sanjeev.bench.LatencyBenchmark.processOneOperation
+
+# Run progress: 50.00% complete, ETA 00:01:32
+# Fork: 1 of 3
+# Warmup Iteration   1: 350.943 ±(99.9%) 243.666 ns/op
+# Warmup Iteration   2: 314.657 ±(99.9%) 29.185 ns/op
+# Warmup Iteration   3: 264.845 ±(99.9%) 13.271 ns/op
+# Warmup Iteration   4: 265.925 ±(99.9%) 75.568 ns/op
+# Warmup Iteration   5: 287.232 ±(99.9%) 76.750 ns/op
+Iteration   1: 253.640 ±(99.9%) 8.191 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   400.000 ns/op
+                 p0.95:   500.000 ns/op
+                 p0.99:   800.000 ns/op
+                 p0.999:  3300.000 ns/op
+                 p0.9999: 28649.059 ns/op
+                 p1.00:   92928.000 ns/op
+
+Iteration   2: 250.061 ±(99.9%) 23.370 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   400.000 ns/op
+                 p0.95:   500.000 ns/op
+                 p0.99:   700.000 ns/op
+                 p0.999:  4669.200 ns/op
+                 p0.9999: 31902.029 ns/op
+                 p1.00:   389120.000 ns/op
+
+Iteration   3: 251.761 ±(99.9%) 15.492 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   400.000 ns/op
+                 p0.95:   500.000 ns/op
+                 p0.99:   700.000 ns/op
+                 p0.999:  4450.976 ns/op
+                 p0.9999: 30639.267 ns/op
+                 p1.00:   183808.000 ns/op
+
+Iteration   4: 328.103 ±(99.9%) 44.282 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   400.000 ns/op
+                 p0.95:   400.000 ns/op
+                 p0.99:   700.000 ns/op
+                 p0.999:  36229.248 ns/op
+                 p0.9999: 132997.248 ns/op
+                 p1.00:   290304.000 ns/op
+
+Iteration   5: 240.323 ±(99.9%) 19.953 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   400.000 ns/op
+                 p0.95:   400.000 ns/op
+                 p0.99:   700.000 ns/op
+                 p0.999:  2987.900 ns/op
+                 p0.9999: 32720.307 ns/op
+                 p1.00:   264704.000 ns/op
+
+Iteration   6: 275.221 ±(99.9%) 16.299 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   400.000 ns/op
+                 p0.95:   500.000 ns/op
+                 p0.99:   800.000 ns/op
+                 p0.999:  5096.000 ns/op
+                 p0.9999: 52000.141 ns/op
+                 p1.00:   201472.000 ns/op
+
+Iteration   7: 239.316 ±(99.9%) 13.611 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   400.000 ns/op
+                 p0.95:   400.000 ns/op
+                 p0.99:   700.000 ns/op
+                 p0.999:  2815.800 ns/op
+                 p0.9999: 33637.734 ns/op
+                 p1.00:   193536.000 ns/op
+
+Iteration   8: 273.538 ±(99.9%) 75.101 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   400.000 ns/op
+                 p0.95:   400.000 ns/op
+                 p0.99:   700.000 ns/op
+                 p0.999:  4004.608 ns/op
+                 p0.9999: 70249.267 ns/op
+                 p1.00:   1234944.000 ns/op
+
+Iteration   9: 242.990 ±(99.9%) 11.522 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   400.000 ns/op
+                 p0.95:   500.000 ns/op
+                 p0.99:   700.000 ns/op
+                 p0.999:  3200.000 ns/op
+                 p0.9999: 30214.605 ns/op
+                 p1.00:   169472.000 ns/op
+
+Iteration  10: 258.595 ±(99.9%) 82.383 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   400.000 ns/op
+                 p0.95:   400.000 ns/op
+                 p0.99:   600.000 ns/op
+                 p0.999:  2268.900 ns/op
+                 p0.9999: 43655.539 ns/op
+                 p1.00:   1449984.000 ns/op
+
+
+# Run progress: 66.67% complete, ETA 00:01:01
+# Fork: 2 of 3
+# Warmup Iteration   1: 393.059 ±(99.9%) 297.664 ns/op
+# Warmup Iteration   2: 255.706 ±(99.9%) 25.363 ns/op
+# Warmup Iteration   3: 240.060 ±(99.9%) 15.412 ns/op
+# Warmup Iteration   4: 242.346 ±(99.9%) 12.413 ns/op
+# Warmup Iteration   5: 242.225 ±(99.9%) 15.438 ns/op
+Iteration   1: 296.441 ±(99.9%) 78.423 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   400.000 ns/op
+                 p0.95:   500.000 ns/op
+                 p0.99:   800.000 ns/op
+                 p0.999:  3847.400 ns/op
+                 p0.9999: 80048.691 ns/op
+                 p1.00:   1343488.000 ns/op
+
+Iteration   2: 272.353 ±(99.9%) 16.536 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   400.000 ns/op
+                 p0.95:   500.000 ns/op
+                 p0.99:   800.000 ns/op
+                 p0.999:  3746.200 ns/op
+                 p0.9999: 78584.218 ns/op
+                 p1.00:   128000.000 ns/op
+
+Iteration   3: 240.108 ±(99.9%) 11.794 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   400.000 ns/op
+                 p0.95:   500.000 ns/op
+                 p0.99:   700.000 ns/op
+                 p0.999:  3200.700 ns/op
+                 p0.9999: 31545.734 ns/op
+                 p1.00:   170752.000 ns/op
+
+Iteration   4: 258.066 ±(99.9%) 9.597 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   400.000 ns/op
+                 p0.95:   500.000 ns/op
+                 p0.99:   800.000 ns/op
+                 p0.999:  2762.600 ns/op
+                 p0.9999: 19106.080 ns/op
+                 p1.00:   107392.000 ns/op
+
+Iteration   5: 520.788 ±(99.9%) 46.675 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   400.000 ns/op
+                 p0.90:   800.000 ns/op
+                 p0.95:   1000.000 ns/op
+                 p0.99:   1500.000 ns/op
+                 p0.999:  15539.200 ns/op
+                 p0.9999: 180213.350 ns/op
+                 p1.00:   546816.000 ns/op
+
+Iteration   6: 295.804 ±(99.9%) 23.987 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   500.000 ns/op
+                 p0.95:   600.000 ns/op
+                 p0.99:   1000.000 ns/op
+                 p0.999:  5023.040 ns/op
+                 p0.9999: 32931.584 ns/op
+                 p1.00:   314880.000 ns/op
+
+Iteration   7: 232.811 ±(99.9%) 11.225 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   400.000 ns/op
+                 p0.95:   400.000 ns/op
+                 p0.99:   700.000 ns/op
+                 p0.999:  2000.000 ns/op
+                 p0.9999: 37163.981 ns/op
+                 p1.00:   125696.000 ns/op
+
+Iteration   8: 318.940 ±(99.9%) 17.546 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   500.000 ns/op
+                 p0.95:   600.000 ns/op
+                 p0.99:   1000.000 ns/op
+                 p0.999:  5258.464 ns/op
+                 p0.9999: 75221.837 ns/op
+                 p1.00:   90752.000 ns/op
+
+Iteration   9: 401.721 ±(99.9%) 47.906 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   300.000 ns/op
+                 p0.90:   500.000 ns/op
+                 p0.95:   600.000 ns/op
+                 p0.99:   1000.000 ns/op
+                 p0.999:  30396.448 ns/op
+                 p0.9999: 209006.566 ns/op
+                 p1.00:   362496.000 ns/op
+
+Iteration  10: 254.621 ±(99.9%) 20.396 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   400.000 ns/op
+                 p0.95:   500.000 ns/op
+                 p0.99:   800.000 ns/op
+                 p0.999:  3541.800 ns/op
+                 p0.9999: 24042.701 ns/op
+                 p1.00:   279040.000 ns/op
+
+
+# Run progress: 83.33% complete, ETA 00:00:30
+# Fork: 3 of 3
+# Warmup Iteration   1: 424.461 ±(99.9%) 337.014 ns/op
+# Warmup Iteration   2: 255.522 ±(99.9%) 19.785 ns/op
+# Warmup Iteration   3: 249.972 ±(99.9%) 21.986 ns/op
+# Warmup Iteration   4: 320.103 ±(99.9%) 17.740 ns/op
+# Warmup Iteration   5: 246.417 ±(99.9%) 12.149 ns/op
+Iteration   1: 276.976 ±(99.9%) 91.053 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   400.000 ns/op
+                 p0.95:   500.000 ns/op
+                 p0.99:   700.000 ns/op
+                 p0.999:  2523.000 ns/op
+                 p0.9999: 47903.936 ns/op
+                 p1.00:   1497088.000 ns/op
+
+Iteration   2: 339.943 ±(99.9%) 47.719 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   400.000 ns/op
+                 p0.95:   500.000 ns/op
+                 p0.99:   800.000 ns/op
+                 p0.999:  32921.088 ns/op
+                 p0.9999: 168802.918 ns/op
+                 p1.00:   265216.000 ns/op
+
+Iteration   3: 261.782 ±(99.9%) 13.232 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   400.000 ns/op
+                 p0.95:   500.000 ns/op
+                 p0.99:   800.000 ns/op
+                 p0.999:  2561.900 ns/op
+                 p0.9999: 38716.333 ns/op
+                 p1.00:   134912.000 ns/op
+
+Iteration   4: 245.697 ±(99.9%) 12.387 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   400.000 ns/op
+                 p0.95:   500.000 ns/op
+                 p0.99:   700.000 ns/op
+                 p0.999:  2990.300 ns/op
+                 p0.9999: 33700.064 ns/op
+                 p1.00:   146176.000 ns/op
+
+Iteration   5: 243.781 ±(99.9%) 14.024 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   400.000 ns/op
+                 p0.95:   500.000 ns/op
+                 p0.99:   700.000 ns/op
+                 p0.999:  2400.000 ns/op
+                 p0.9999: 25468.813 ns/op
+                 p1.00:   204800.000 ns/op
+
+Iteration   6: 350.094 ±(99.9%) 50.062 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   400.000 ns/op
+                 p0.95:   500.000 ns/op
+                 p0.99:   700.000 ns/op
+                 p0.999:  73932.032 ns/op
+                 p0.9999: 159012.659 ns/op
+                 p1.00:   262656.000 ns/op
+
+Iteration   7: 246.503 ±(99.9%) 16.659 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   400.000 ns/op
+                 p0.95:   500.000 ns/op
+                 p0.99:   700.000 ns/op
+                 p0.999:  2767.000 ns/op
+                 p0.9999: 32634.816 ns/op
+                 p1.00:   217344.000 ns/op
+
+Iteration   8: 411.013 ±(99.9%) 92.861 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   300.000 ns/op
+                 p0.90:   500.000 ns/op
+                 p0.95:   700.000 ns/op
+                 p0.99:   1000.000 ns/op
+                 p0.999:  34399.744 ns/op
+                 p0.9999: 129460.019 ns/op
+                 p1.00:   1386496.000 ns/op
+
+Iteration   9: 249.473 ±(99.9%) 20.981 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   400.000 ns/op
+                 p0.95:   500.000 ns/op
+                 p0.99:   700.000 ns/op
+                 p0.999:  2585.500 ns/op
+                 p0.9999: 31636.032 ns/op
+                 p1.00:   314880.000 ns/op
+
+Iteration  10: 243.507 ±(99.9%) 15.573 ns/op
+                 p0.00:   ≈ 0 ns/op
+                 p0.50:   200.000 ns/op
+                 p0.90:   400.000 ns/op
+                 p0.95:   500.000 ns/op
+                 p0.99:   700.000 ns/op
+                 p0.999:  2215.700 ns/op
+                 p0.9999: 28198.707 ns/op
+                 p1.00:   241152.000 ns/op
+
+
+
+Result "com.sanjeev.bench.LatencyBenchmark.processOneOperation":
+  N = 1693481
+  mean =    287.411 ±(99.9%) 7.628 ns/op
+
+  Histogram, ns/op:
+    [      0.000,  125000.000) = 1693397 
+    [ 125000.000,  250000.000) = 65 
+    [ 250000.000,  375000.000) = 11 
+    [ 375000.000,  500000.000) = 2 
+    [ 500000.000,  625000.000) = 1 
+    [ 625000.000,  750000.000) = 0 
+    [ 750000.000,  875000.000) = 0 
+    [ 875000.000, 1000000.000) = 0 
+    [1000000.000, 1125000.000) = 0 
+    [1125000.000, 1250000.000) = 1 
+    [1250000.000, 1375000.000) = 1 
+    [1375000.000, 1500000.000) = 3 
+    [1500000.000, 1625000.000) = 0 
+    [1625000.000, 1750000.000) = 0 
+    [1750000.000, 1875000.000) = 0 
+
+  Percentiles, ns/op:
+      p(0.0000) =        ≈ 0 ns/op
+     p(50.0000) =    200.000 ns/op
+     p(90.0000) =    400.000 ns/op
+     p(95.0000) =    500.000 ns/op
+     p(99.0000) =    900.000 ns/op
+     p(99.9000) =   4496.000 ns/op
+     p(99.9900) =  88058.291 ns/op
+     p(99.9990) = 264737.372 ns/op
+     p(99.9999) = 1464422.224 ns/op
+    p(100.0000) = 1497088.000 ns/op
+
+
+# Run complete. Total time: 00:03:04
+
+REMEMBER: The numbers below are just data. To gain reusable insights, you need to follow up on
+why the numbers are the way they are. Use profilers (see -prof, -lprof), design factorial
+experiments, perform baseline and negative tests that provide experimental control, make sure
+the benchmarking environment is safe on JVM/OS/HW level, ask for reviews from the domain experts.
+Do not assume the numbers tell you what you want them to tell.
+
+NOTE: Current JVM experimentally supports Compiler Blackholes, and they are in use. Please exercise
+extra caution when trusting the results, look into the generated code to check the benchmark still
+works, and factor in a small probability of new VM bugs. Additionally, while comparisons between
+different JVMs are already problematic, the performance difference caused by different Blackhole
+modes can be very significant. Please make sure you use the consistent Blackhole mode for comparisons.
+
+Benchmark                                       Mode      Cnt        Score        Error  Units
+ThroughputBenchmark.processTheMix              thrpt       30  4782589.946 ± 362972.034  ops/s
+LatencyBenchmark.processOneOperation          sample  1693481      287.411 ±      7.628  ns/op
+LatencyBenchmark.processOneOperation:p0.00    sample                   ≈ 0               ns/op
+LatencyBenchmark.processOneOperation:p0.50    sample               200.000               ns/op
+LatencyBenchmark.processOneOperation:p0.90    sample               400.000               ns/op
+LatencyBenchmark.processOneOperation:p0.95    sample               500.000               ns/op
+LatencyBenchmark.processOneOperation:p0.99    sample               900.000               ns/op
+LatencyBenchmark.processOneOperation:p0.999   sample              4496.000               ns/op
+LatencyBenchmark.processOneOperation:p0.9999  sample             88058.291               ns/op
+LatencyBenchmark.processOneOperation:p1.00    sample           1497088.000               ns/op
+
+Benchmark result is saved to benchmarks/results/baseline-rerun.json

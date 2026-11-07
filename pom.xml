@@ -49,4 +49,113 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!--
+          Benchmarks (JMH). Everything JMH-related lives in this profile and in src/jmh/java, so the
+          normal build, the tests and the engine never see it. Run them with:
+
+            mvn -Pjmh compile exec:exec@jmh
+            mvn -Pjmh compile exec:exec@jmh "-Djmh.args=Throughput -prof gc"
+
+          exec:exec starts a plain `java -cp ...` process (not exec:java), because JMH forks fresh
+          JVMs for each run and they need a real classpath to inherit.
+        -->
+        <profile>
+            <id>jmh</id>
+            <properties>
+                <jmh.version>1.37</jmh.version>
+                <jmh.args>.*Benchmark</jmh.args>
+                <!-- only for exploring book depth with the sanity run; the benchmarks use the fixed default -->
+                <bench.passive>80</bench.passive>
+            </properties>
+            <dependencies>
+                <dependency>
+                    <groupId>org.openjdk.jmh</groupId>
+                    <artifactId>jmh-core</artifactId>
+                    <version>${jmh.version}</version>
+                </dependency>
+            </dependencies>
+            <build>
+                <plugins>
+                    <!-- compile src/jmh/java together with the main sources, in this profile only -->
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <version>3.6.0</version>
+                        <executions>
+                            <execution>
+                                <id>add-jmh-sources</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>add-source</goal>
+                                </goals>
+                                <configuration>
+                                    <sources>
+                                        <source>src/jmh/java</source>
+                                    </sources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- the JMH annotation processor generates the benchmark harness classes -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <version>3.13.0</version>
+                        <configuration>
+                            <annotationProcessorPaths>
+                                <path>
+                                    <groupId>org.openjdk.jmh</groupId>
+                                    <artifactId>jmh-generator-annprocess</artifactId>
+                                    <version>${jmh.version}</version>
+                                </path>
+                            </annotationProcessorPaths>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.5.0</version>
+                        <executions>
+                            <execution>
+                                <id>jmh</id>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>java</executable>
+                                    <commandlineArgs>-cp %classpath org.openjdk.jmh.Main ${jmh.args}</commandlineArgs>
+                                </configuration>
+                            </execution>
+                            <!-- not a benchmark: runs the workload under Java Flight Recorder to show
+                                 WHERE time and allocations go (mvn -Pjmh compile exec:exec@profile) -->
+                            <execution>
+                                <id>profile</id>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>java</executable>
+                                    <commandlineArgs>-Xms1g -Xmx1g -XX:StartFlightRecording=filename=benchmarks/results/profile.jfr,settings=profile,dumponexit=true -cp %classpath com.sanjeev.bench.ProfileRun</commandlineArgs>
+                                </configuration>
+                            </execution>
+                            <!-- not a benchmark: prints what the workload actually does
+                                 (mvn -Pjmh compile exec:exec@sanity) -->
+                            <execution>
+                                <id>sanity</id>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>java</executable>
+                                    <commandlineArgs>-Dbench.passive=${bench.passive} -cp %classpath com.sanjeev.bench.WorkloadSanity</commandlineArgs>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

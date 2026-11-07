@@ -5,21 +5,20 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 
 /**
  * The noticeboard: every resting (waiting) order, grouped by price.
  *
- * <p>Bids (buyers) are sorted HIGHEST price first, because the best buyer is the one
- * willing to pay the most. Asks (sellers) are sorted LOWEST price first, because the
- * best seller is the cheapest. So in both maps, the first entry is the "best" price.
+ * <p>Bids (buyers) are kept HIGHEST price first, because the best buyer is the one
+ * willing to pay the most. Asks (sellers) are kept LOWEST price first, because the
+ * best seller is the cheapest. So on both sides, the first level is the "best" price.
+ * Each side is a {@link PriceLevelMap}: sorted primitive arrays, with no boxing.
  *
- * <p>Besides the two price maps there is an INDEX: order id -> order, for every resting
+ * <p>Besides the two price sides there is an INDEX: order id -> order, for every resting
  * order. It lets us find any order instantly by id (needed to cancel). Rule: the index
  * holds exactly the orders that are resting, no more, no fewer.
  */
@@ -28,12 +27,14 @@ public final class OrderBook {
     /** One row of the ladder: a price and the total quantity waiting there. */
     public record Level(long priceInPaise, long totalQuantity) { }
 
-    private final TreeMap<Long, PriceLevel> bids = new TreeMap<>(Comparator.reverseOrder());
-    private final TreeMap<Long, PriceLevel> asks = new TreeMap<>();
+    private final PriceLevelMap bids = new PriceLevelMap(true);   // highest price is best
+    private final PriceLevelMap asks = new PriceLevelMap(false);  // lowest price is best
     private final Map<Long, Order> index = new HashMap<>();
 
     /**
-     * Put a LIMIT order on the book. No matching. O(log P), P = number of price levels.
+     * Put a LIMIT order on the book. No matching. O(log P) to find its price level, P = number of
+     * price levels; creating a NEW level also shifts array elements, O(P) worst case (little, near
+     * the best price, where most orders arrive).
      *
      * @throws IllegalArgumentException if null, not a limit order, or its id is already resting
      */
@@ -47,7 +48,7 @@ public final class OrderBook {
         if (index.containsKey(order.getId())) {
             throw new IllegalArgumentException("duplicate order id " + order.getId());
         }
-        sideOf(order.getSide()).computeIfAbsent(order.getPriceInPaise(), PriceLevel::new).add(order);
+        sideOf(order.getSide()).getOrCreate(order.getPriceInPaise()).add(order);
         index.put(order.getId(), order);
     }
 
@@ -88,12 +89,12 @@ public final class OrderBook {
 
     /** Highest buy price, or null if there are no bids. O(log P). */
     public Long bestBid() {
-        return bids.isEmpty() ? null : bids.firstKey();
+        return bids.isEmpty() ? null : bids.bestPrice();
     }
 
     /** Lowest sell price, or null if there are no asks. O(log P). */
     public Long bestAsk() {
-        return asks.isEmpty() ? null : asks.firstKey();
+        return asks.isEmpty() ? null : asks.bestPrice();
     }
 
     /** Gap between best ask and best bid, or null if either side is empty. O(log P). */
@@ -123,13 +124,12 @@ public final class OrderBook {
 
     /** The best (first) price level on one side, or null if that side is empty. O(log P). */
     PriceLevel bestLevel(Side side) {
-        TreeMap<Long, PriceLevel> map = sideOf(side);
-        return map.isEmpty() ? null : map.firstEntry().getValue();
+        return sideOf(side).best();
     }
 
     /** Remove a price level from the map if it has no orders left. O(log P). */
     void removeLevelIfEmpty(Side side, long priceInPaise) {
-        TreeMap<Long, PriceLevel> map = sideOf(side);
+        PriceLevelMap map = sideOf(side);
         PriceLevel level = map.get(priceInPaise);
         if (level != null && level.isEmpty()) {
             map.remove(priceInPaise);
@@ -241,7 +241,7 @@ public final class OrderBook {
     }
 
     /** Which map holds this side. */
-    private TreeMap<Long, PriceLevel> sideOf(Side side) {
+    private PriceLevelMap sideOf(Side side) {
         return side == Side.BUY ? bids : asks;
     }
 
@@ -252,9 +252,9 @@ public final class OrderBook {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        // asks map is lowest-first, so walk it backwards to print highest-first
-        for (Map.Entry<Long, PriceLevel> e : asks.descendingMap().entrySet()) {
-            sb.append(String.format("ASK %8d x %d%n", e.getKey(), e.getValue().totalQuantity()));
+        // the ask side is printed highest price first, i.e. WORST first
+        for (PriceLevel level : asks.worstFirst()) {
+            sb.append(String.format("ASK %8d x %d%n", level.getPriceInPaise(), level.totalQuantity()));
         }
         Long spread = spread();
         sb.append("---- spread: ").append(spread == null ? "n/a" : spread).append(" ----")
