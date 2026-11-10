@@ -1,0 +1,5 @@
+# Keep every file LF in the repository AND in the working copy, so Git on Windows stops
+# warning "LF will be replaced by CRLF" and diffs never show invisible line-ending changes.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf

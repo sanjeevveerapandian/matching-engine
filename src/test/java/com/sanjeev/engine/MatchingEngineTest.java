@@ -1,5 +1,6 @@
 package com.sanjeev.engine;
 
+import static com.sanjeev.engine.BookTestSupport.quantityAt;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -27,13 +28,6 @@ class MatchingEngineTest {
         Order order = new Order(nextId, trader, side, price, qty, nextId);
         nextId++;
         return engine.submitLimit(order);
-    }
-
-    private long quantityAt(Side side, long price) {
-        return book.depth(side, 100).stream()
-                .filter(level -> level.priceInPaise() == price)
-                .mapToLong(OrderBook.Level::totalQuantity)
-                .sum();
     }
 
     // ---------------------------------------------------------------- incoming BUY
@@ -75,7 +69,7 @@ class MatchingEngineTest {
         assertEquals(10, trades.get(0).quantity());
         assertNull(book.bestAsk());
         assertEquals(3000L, book.bestBid());
-        assertEquals(15, quantityAt(Side.BUY, 3000));
+        assertEquals(15, quantityAt(book, Side.BUY, 3000));
     }
 
     @Test
@@ -89,7 +83,7 @@ class MatchingEngineTest {
         Order front = book.levelAt(Side.SELL, 3000).peekFirst();
         assertEquals("Ravi", front.getTrader());
         assertEquals(30, front.getRemainingQuantity());
-        assertEquals(35, quantityAt(Side.SELL, 3000));
+        assertEquals(35, quantityAt(book, Side.SELL, 3000));
         assertNull(book.bestBid());
     }
 
@@ -149,7 +143,7 @@ class MatchingEngineTest {
 
         assertNull(book.bestAsk());
         assertTrue(book.depth(Side.SELL, 10).isEmpty());
-        assertEquals(List.of(new OrderBook.Level(3300, 2), new OrderBook.Level(2900, 4)),
+        assertEquals(List.of(new OrderBook.LevelSummary(3300, 2), new OrderBook.LevelSummary(2900, 4)),
                 book.depth(Side.BUY, 10));
     }
 
@@ -162,7 +156,7 @@ class MatchingEngineTest {
 
         assertEquals(1, trades.size());
         assertEquals(3200L, book.bestAsk());
-        assertEquals(20, quantityAt(Side.BUY, 3100));
+        assertEquals(20, quantityAt(book, Side.BUY, 3100));
     }
 
     // ---------------------------------------------------------------- incoming SELL (mirror)
@@ -204,7 +198,7 @@ class MatchingEngineTest {
         assertEquals(10, trades.get(0).quantity());
         assertNull(book.bestBid());
         assertEquals(3000L, book.bestAsk());
-        assertEquals(15, quantityAt(Side.SELL, 3000));
+        assertEquals(15, quantityAt(book, Side.SELL, 3000));
     }
 
     @Test
@@ -218,7 +212,7 @@ class MatchingEngineTest {
         Order front = book.levelAt(Side.BUY, 3000).peekFirst();
         assertEquals("Anu", front.getTrader());
         assertEquals(30, front.getRemainingQuantity());
-        assertEquals(35, quantityAt(Side.BUY, 3000));
+        assertEquals(35, quantityAt(book, Side.BUY, 3000));
         assertNull(book.bestAsk());
     }
 
@@ -278,7 +272,7 @@ class MatchingEngineTest {
 
         assertNull(book.bestBid());
         assertTrue(book.depth(Side.BUY, 10).isEmpty());
-        assertEquals(List.of(new OrderBook.Level(2900, 2), new OrderBook.Level(3400, 4)),
+        assertEquals(List.of(new OrderBook.LevelSummary(2900, 2), new OrderBook.LevelSummary(3400, 4)),
                 book.depth(Side.SELL, 10));
     }
 
@@ -291,7 +285,7 @@ class MatchingEngineTest {
 
         assertEquals(1, trades.size());
         assertEquals(3000L, book.bestBid());
-        assertEquals(20, quantityAt(Side.SELL, 3100));
+        assertEquals(20, quantityAt(book, Side.SELL, 3100));
     }
 
     // ---------------------------------------------------------------- trade details
@@ -307,7 +301,7 @@ class MatchingEngineTest {
         assertEquals(2, trades.get(1).tradeId());
         assertEquals(3, trades.get(0).buyOrderId());
         assertEquals(1, trades.get(0).sellOrderId());
-        assertEquals(3, trades.get(0).sequence());
+        assertEquals(3, trades.get(0).incomingSequence());
         assertEquals(2, trades.get(1).sellOrderId());
     }
 

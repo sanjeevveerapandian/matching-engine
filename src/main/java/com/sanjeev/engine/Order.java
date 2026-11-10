@@ -114,11 +114,12 @@ public final class Order {
     }
 
     /**
-     * Reduce the unfilled quantity after a trade.
+     * Reduce the unfilled quantity after a trade. Package-private: only the engine fills orders,
+     * so no caller can shrink an order without a matching trade.
      *
      * @throws IllegalArgumentException if qty is not positive or exceeds what is left
      */
-    public void fill(long qty) {
+    void fill(long qty) {
         if (qty <= 0) {
             throw new IllegalArgumentException("fill quantity must be positive, got " + qty);
         }

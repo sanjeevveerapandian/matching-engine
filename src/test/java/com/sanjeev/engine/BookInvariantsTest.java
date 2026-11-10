@@ -129,6 +129,37 @@ class BookInvariantsTest {
     }
 
     @Test
+    void aBuyOrderFiledOnTheAskSideIsDetectedEvenWhenPricesDoNotCross() {
+        Order anu = order(1, Side.BUY, 3000, 10, 1);
+        book.addResting(anu);
+        // move the whole level, and the index entry stays correct: only the side is wrong
+        PriceLevel level = book.levelsOf(Side.BUY).remove(3000L);
+        book.levelsOf(Side.SELL).put(3000L, level);
+
+        assertBroken("wrong side");
+    }
+
+    @Test
+    void aSellOrderFiledOnTheBidSideIsDetected() {
+        book.addResting(order(1, Side.SELL, 3000, 10, 1));
+        PriceLevel level = book.levelsOf(Side.SELL).remove(3000L);
+        book.levelsOf(Side.BUY).put(3000L, level);
+
+        assertBroken("wrong side");
+    }
+
+    @Test
+    void aRestingOrderThatIsNotGoodTillCancelledIsDetected() {
+        Order ioc = Order.limit(1, "Ravi", Side.SELL, 3000, 10, 1, TimeInForce.IOC);
+        PriceLevel level = new PriceLevel(3000);
+        level.add(ioc);
+        book.levelsOf(Side.SELL).put(3000L, level);
+        book.rawIndex().put(1L, ioc); // index and book agree: only the order kind is wrong
+
+        assertBroken("good-till-cancelled");
+    }
+
+    @Test
     void twoOrdersWithTheSameSequenceInALevelAreDetected() {
         book.addResting(order(1, Side.SELL, 3000, 10, 4));
         book.addResting(order(2, Side.SELL, 3000, 10, 4));

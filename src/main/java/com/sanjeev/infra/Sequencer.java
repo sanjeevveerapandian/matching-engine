@@ -182,6 +182,16 @@ public final class Sequencer {
             while (!queue.offer(work, WAIT_MS, TimeUnit.MILLISECONDS)) {
                 throwIfFailed(); // do not wait forever on a dead engine thread
             }
+            // The engine thread may have died and emptied the queue just BEFORE our offer went in. Then
+            // nobody will ever read this work, and its future would never complete. The engine sets
+            // 'failure' before it empties the queue, so: if 'failure' is still null here, the emptying
+            // has not happened yet and will include our work; if it is set, we must clean up ourselves.
+            Throwable failed = failure;
+            if (failed != null) {
+                queue.remove(work);
+                failWork(work, new IllegalStateException("sequencer stopped after a failure: " + failed, failed));
+                throwIfFailed();
+            }
         } finally {
             gate.readLock().unlock();
         }

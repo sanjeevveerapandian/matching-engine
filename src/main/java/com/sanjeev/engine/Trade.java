@@ -12,7 +12,7 @@ package com.sanjeev.engine;
  * @param seller      trader who sold
  * @param price       price in paise: always the RESTING order's price
  * @param quantity    units traded
- * @param sequence    sequence number of the incoming order that caused this trade
+ * @param incomingSequence sequence number of the incoming order that caused this trade
  */
 public record Trade(
         long tradeId,
@@ -22,4 +22,4 @@ public record Trade(
         String seller,
         long price,
         long quantity,
-        long sequence) { }
+        long incomingSequence) { }

@@ -83,4 +83,17 @@ class SequenceOrderTest {
         assertTrue(trades.isEmpty());
         assertEquals(1, engine.book().indexSize());
     }
+
+    @Test
+    void anOldArrivalNumberDoesNotStopAnOrderThatTradesCompletelyBecauseItNeverQueues() {
+        CheckedEngine engine = new CheckedEngine();
+        engine.submitLimit(new Order(1, "Ravi", Side.SELL, 3000, 10, 5));
+
+        // sequence 2 is older than everything on the book, but this buy never queues: it trades fully
+        List<Trade> trades = engine.submitLimit(new Order(2, "Anu", Side.BUY, 3000, 4, 2));
+
+        assertEquals(1, trades.size());
+        assertEquals(4, trades.get(0).quantity());
+        assertEquals(1, engine.book().indexSize()); // Ravi, with 6 left
+    }
 }

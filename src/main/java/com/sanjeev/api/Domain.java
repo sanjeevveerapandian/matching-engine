@@ -53,5 +53,5 @@ public final class Domain {
                                    int modifies, int notFound, int rejected, int trades) { }
 
     /** The top of the book: best levels first, and the best bid and ask in paise (null if empty). */
-    public record BookSnapshot(List<OrderBook.Level> bids, List<OrderBook.Level> asks, Long bestBid, Long bestAsk) { }
+    public record BookSnapshot(List<OrderBook.LevelSummary> bids, List<OrderBook.LevelSummary> asks, Long bestBid, Long bestAsk) { }
 }

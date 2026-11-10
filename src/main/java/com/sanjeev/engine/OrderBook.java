@@ -8,6 +8,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -24,8 +25,8 @@ import java.util.Map;
  */
 public final class OrderBook {
 
-    /** One row of the ladder: a price and the total quantity waiting there. */
-    public record Level(long priceInPaise, long totalQuantity) { }
+    /** One row of the ladder: a price and the total quantity waiting there (not the queue: see {@link PriceLevel}). */
+    public record LevelSummary(long priceInPaise, long totalQuantity) { }
 
     private final PriceLevelMap bids = new PriceLevelMap(true);   // highest price is best
     private final PriceLevelMap asks = new PriceLevelMap(false);  // lowest price is best
@@ -36,14 +37,25 @@ public final class OrderBook {
      * price levels; creating a NEW level also shifts array elements, O(P) worst case (little, near
      * the best price, where most orders arrive).
      *
-     * @throws IllegalArgumentException if null, not a limit order, or its id is already resting
+     * <p>Package-private on purpose: only the engine decides what rests. A public method would let
+     * any caller build a crossed book or park an IOC order forever.
+     *
+     * @throws IllegalArgumentException if null, not a good-till-cancelled limit order, already
+     *         completely filled, or its id is already resting
      */
-    public void addResting(Order order) {
+    void addResting(Order order) {
         if (order == null) {
             throw new IllegalArgumentException("order must not be null");
         }
         if (order.getType() != OrderType.LIMIT) {
             throw new IllegalArgumentException("only limit orders can rest on the book");
+        }
+        if (order.getTimeInForce() != TimeInForce.GTC) {
+            throw new IllegalArgumentException(
+                    "only good-till-cancelled orders can rest on the book, got " + order.getTimeInForce());
+        }
+        if (order.isFullyFilled()) {
+            throw new IllegalArgumentException("an order with nothing left to trade cannot rest");
         }
         if (index.containsKey(order.getId())) {
             throw new IllegalArgumentException("duplicate order id " + order.getId());
@@ -60,10 +72,12 @@ public final class OrderBook {
     /**
      * Cancel a resting order.
      *
+     * <p>Package-private: callers cancel through {@link MatchingEngine#cancel}.
+     *
      * @return true if it was resting and is now removed; false if the id is unknown or the
      *         order is no longer resting (already filled or already cancelled)
      */
-    public boolean cancel(long orderId) {
+    boolean cancel(long orderId) {
         Order order = index.get(orderId); // O(1): no scanning of the book
         if (order == null) {
             return false;
@@ -108,16 +122,16 @@ public final class OrderBook {
      * The top {@code levels} price levels of one side, best price first. O(levels * n),
      * where n is orders per level (each level's total is summed).
      */
-    public List<Level> depth(Side side, int levels) {
+    public List<LevelSummary> depth(Side side, int levels) {
         if (levels < 0) {
             throw new IllegalArgumentException("levels must not be negative, got " + levels);
         }
-        List<Level> result = new ArrayList<>();
+        List<LevelSummary> result = new ArrayList<>();
         for (PriceLevel level : sideOf(side).values()) {
             if (result.size() == levels) {
                 break;
             }
-            result.add(new Level(level.getPriceInPaise(), level.totalQuantity()));
+            result.add(new LevelSummary(level.getPriceInPaise(), level.totalQuantity()));
         }
         return result;
     }
@@ -254,13 +268,13 @@ public final class OrderBook {
         StringBuilder sb = new StringBuilder();
         // the ask side is printed highest price first, i.e. WORST first
         for (PriceLevel level : asks.worstFirst()) {
-            sb.append(String.format("ASK %8d x %d%n", level.getPriceInPaise(), level.totalQuantity()));
+            sb.append(String.format(Locale.ROOT, "ASK %8d x %d%n", level.getPriceInPaise(), level.totalQuantity()));
         }
         Long spread = spread();
         sb.append("---- spread: ").append(spread == null ? "n/a" : spread).append(" ----")
                 .append(System.lineSeparator());
         for (Map.Entry<Long, PriceLevel> e : bids.entrySet()) {
-            sb.append(String.format("BID %8d x %d%n", e.getKey(), e.getValue().totalQuantity()));
+            sb.append(String.format(Locale.ROOT, "BID %8d x %d%n", e.getKey(), e.getValue().totalQuantity()));
         }
         return sb.toString();
     }

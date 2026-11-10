@@ -52,7 +52,7 @@ class MarketDataBroadcasterTest {
     @Test
     void aBookChangeSendsTheCurrentLaddersToTheBookTopicWithRupeePrices() {
         start(new Domain.BookSnapshot(
-                List.of(new OrderBook.Level(4000, 120)), List.of(new OrderBook.Level(4050, 10)), 4000L, 4050L));
+                List.of(new OrderBook.LevelSummary(4000, 120)), List.of(new OrderBook.LevelSummary(4050, 10)), 4000L, 4050L));
 
         broadcaster.onBookChanged();
 

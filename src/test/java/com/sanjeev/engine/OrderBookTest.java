@@ -159,12 +159,12 @@ class OrderBookTest {
         rest(Side.BUY, 3100, 6);
         rest(Side.BUY, 2900, 7);
 
-        List<OrderBook.Level> bids = book.depth(Side.BUY, 10);
+        List<OrderBook.LevelSummary> bids = book.depth(Side.BUY, 10);
 
         assertEquals(List.of(
-                new OrderBook.Level(3100, 10),
-                new OrderBook.Level(3000, 10),
-                new OrderBook.Level(2900, 7)), bids);
+                new OrderBook.LevelSummary(3100, 10),
+                new OrderBook.LevelSummary(3000, 10),
+                new OrderBook.LevelSummary(2900, 7)), bids);
     }
 
     @Test
@@ -174,9 +174,9 @@ class OrderBookTest {
         rest(Side.SELL, 3200, 3);
 
         assertEquals(List.of(
-                new OrderBook.Level(3100, 2),
-                new OrderBook.Level(3200, 3),
-                new OrderBook.Level(3300, 1)), book.depth(Side.SELL, 10));
+                new OrderBook.LevelSummary(3100, 2),
+                new OrderBook.LevelSummary(3200, 3),
+                new OrderBook.LevelSummary(3300, 1)), book.depth(Side.SELL, 10));
     }
 
     @Test
@@ -185,9 +185,9 @@ class OrderBookTest {
         rest(Side.BUY, 3100, 1);
         rest(Side.BUY, 2900, 1);
 
-        List<OrderBook.Level> top2 = book.depth(Side.BUY, 2);
+        List<OrderBook.LevelSummary> top2 = book.depth(Side.BUY, 2);
 
-        assertEquals(List.of(new OrderBook.Level(3100, 1), new OrderBook.Level(3000, 1)), top2);
+        assertEquals(List.of(new OrderBook.LevelSummary(3100, 1), new OrderBook.LevelSummary(3000, 1)), top2);
     }
 
     @Test
@@ -225,5 +225,103 @@ class OrderBookTest {
     @Test
     void ladderOfAnEmptyBookShowsOnlyAnUnknownSpread() {
         assertTrue(book.toString().contains("spread: n/a"));
+    }
+
+    @Test
+    void ladderWithOnlyOneSideStillPrintsThatSideAndAnUnknownSpread() {
+        rest(Side.SELL, 3300, 5);
+
+        String ladder = book.toString();
+
+        assertTrue(ladder.contains("ASK") && ladder.contains("3300"));
+        assertFalse(ladder.contains("BID"));
+        assertTrue(ladder.contains("spread: n/a"));
+    }
+
+    @Test
+    void ladderUsesPlainAsciiDigitsWhateverTheMachinesLanguageIs() {
+        java.util.Locale original = java.util.Locale.getDefault();
+        try {
+            java.util.Locale.setDefault(java.util.Locale.forLanguageTag("th-TH-u-nu-thai")); // Thai digits
+            rest(Side.SELL, 3300, 5);
+
+            String ladder = book.toString();
+
+            assertTrue(ladder.matches("(?s)[\\x00-\\x7F]*"), "non-ASCII characters in the ladder: " + ladder);
+            assertTrue(ladder.contains("3300 x 5"));
+        } finally {
+            java.util.Locale.setDefault(original);
+        }
+    }
+
+    // ---------------------------------------------------------------- the book notices its own corruption
+
+    @Test
+    void removingAnOrderThatNoLevelHoldsIsReportedAsCorruptionNotIgnored() {
+        Order ghost = new Order(1, Side.SELL, 3000, 10, 1);
+        book.rawIndex().put(1L, ghost); // the index claims it rests, but there is no level at 3000
+
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> book.removeResting(ghost));
+
+        assertTrue(e.getMessage().contains("out of sync"), e.getMessage());
+    }
+
+    @Test
+    void removingAnOrderThatItsLevelDoesNotHoldIsReportedAsCorruption() {
+        rest(Side.SELL, 3000, 10);                      // a real level at 3000 exists
+        Order stranger = new Order(99, Side.SELL, 3000, 5, 99);
+        book.rawIndex().put(99L, stranger);             // indexed, but not in that level's queue
+
+        assertThrows(IllegalStateException.class, () -> book.cancel(99));
+    }
+
+    @Test
+    void aLevelThatStillHasOrdersIsNotRemovedAndAPriceWithNoLevelIsIgnored() {
+        rest(Side.SELL, 3000, 10);
+
+        book.removeLevelIfEmpty(Side.SELL, 3000); // still has an order: stays
+        book.removeLevelIfEmpty(Side.SELL, 9999); // no such level: nothing happens
+
+        assertEquals(10, book.depth(Side.SELL, 5).get(0).totalQuantity());
+        assertEquals(1, book.depth(Side.SELL, 5).size());
+    }
+
+    @Test
+    void theLevelsBestFirstViewKnowsHowManyLevelsThereAre() {
+        rest(Side.SELL, 3000, 1);
+        rest(Side.SELL, 3100, 1);
+        rest(Side.SELL, 3100, 1);
+
+        assertEquals(2, book.levelsBestFirst(Side.SELL).size());
+        assertEquals(0, book.levelsBestFirst(Side.BUY).size());
+    }
+
+    // ---------------------------------------------------------------- only GTC orders with something left may rest
+
+    @Test
+    void anImmediateOrCancelOrderIsNeverAllowedToRest() {
+        Order ioc = Order.limit(1, "Ravi", Side.SELL, 3000, 10, 1, TimeInForce.IOC);
+
+        assertThrows(IllegalArgumentException.class, () -> book.addResting(ioc));
+        assertFalse(book.contains(1));
+        assertEquals(0, book.restingOrderCount());
+    }
+
+    @Test
+    void aFillOrKillOrderIsNeverAllowedToRest() {
+        Order fok = Order.limit(1, "Ravi", Side.SELL, 3000, 10, 1, TimeInForce.FOK);
+
+        assertThrows(IllegalArgumentException.class, () -> book.addResting(fok));
+        assertFalse(book.contains(1));
+    }
+
+    @Test
+    void anOrderWithNothingLeftToTradeIsNeverAllowedToRest() {
+        Order finished = new Order(1, Side.SELL, 3000, 10, 1);
+        finished.fill(10);
+
+        assertThrows(IllegalArgumentException.class, () -> book.addResting(finished));
+        assertFalse(book.contains(1));
+        assertEquals(0, book.restingOrderCount());
     }
 }

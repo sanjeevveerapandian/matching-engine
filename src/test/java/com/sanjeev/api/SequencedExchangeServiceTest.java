@@ -275,8 +275,8 @@ class SequencedExchangeServiceTest {
 
         Domain.BookSnapshot book = service.book(10);
 
-        assertEquals(List.of(new OrderBook.Level(4000, 10), new OrderBook.Level(3900, 5)), book.bids());
-        assertEquals(List.of(new OrderBook.Level(4100, 6), new OrderBook.Level(4200, 2)), book.asks());
+        assertEquals(List.of(new OrderBook.LevelSummary(4000, 10), new OrderBook.LevelSummary(3900, 5)), book.bids());
+        assertEquals(List.of(new OrderBook.LevelSummary(4100, 6), new OrderBook.LevelSummary(4200, 2)), book.asks());
         assertEquals(4000L, book.bestBid());
         assertEquals(4100L, book.bestAsk());
     }

@@ -34,8 +34,8 @@ class MarketDataControllerTest {
     @Test
     void theBookIsShownWithRupeePricesBestFirstAndTheSpread() throws Exception {
         when(exchange.book(10)).thenReturn(new Domain.BookSnapshot(
-                List.of(new OrderBook.Level(4000, 120), new OrderBook.Level(3950, 30)),
-                List.of(new OrderBook.Level(4050, 10), new OrderBook.Level(4100, 7)),
+                List.of(new OrderBook.LevelSummary(4000, 120), new OrderBook.LevelSummary(3950, 30)),
+                List.of(new OrderBook.LevelSummary(4050, 10), new OrderBook.LevelSummary(4100, 7)),
                 4000L, 4050L));
 
         mvc.perform(get("/api/book"))
@@ -66,7 +66,7 @@ class MarketDataControllerTest {
     @Test
     void oneSidedBookHasNoSpread() throws Exception {
         when(exchange.book(10)).thenReturn(new Domain.BookSnapshot(
-                List.of(new OrderBook.Level(4000, 1)), List.of(), 4000L, null));
+                List.of(new OrderBook.LevelSummary(4000, 1)), List.of(), 4000L, null));
 
         mvc.perform(get("/api/book"))
                 .andExpect(jsonPath("$.bestBid").value("40.00"))

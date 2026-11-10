@@ -241,6 +241,52 @@ class LogRecoveryReadTest {
         assertThrows(CorruptLogException.class, () -> EventLog.readRecoverable(file));
     }
 
+    @Test
+    void twoSwappedSequenceNumbersInTheMiddleAreCorruptionEvenThoughTheLastLineLooksRight() throws IOException {
+        Path file = writeLog(5);
+        List<String> lines = Files.readAllLines(file);
+        lines.set(1, lines.get(1).replace("\"sequence\":2", "\"sequence\":3")); // line 2 claims to be 3
+        lines.set(2, lines.get(2).replace("\"sequence\":3", "\"sequence\":2")); // line 3 claims to be 2
+        Files.write(file, lines);
+
+        CorruptLogException e = assertThrows(CorruptLogException.class, () -> EventLog.readRecoverable(file));
+
+        assertTrue(e.getMessage().contains("line 2") && e.getMessage().contains("expected"), e.getMessage());
+    }
+
+    @Test
+    void aLongDamagedLineIsShortenedInTheErrorMessageSoTheLogStaysReadable() throws IOException {
+        Path file = writeLog(4);
+        List<String> lines = Files.readAllLines(file);
+        lines.set(1, "x".repeat(500));
+        Files.write(file, lines);
+
+        CorruptLogException e = assertThrows(CorruptLogException.class, () -> EventLog.readRecoverable(file));
+
+        assertTrue(e.getMessage().contains("x".repeat(80) + "..."), e.getMessage());
+        assertTrue(e.getMessage().length() < 300, "message was " + e.getMessage().length() + " characters");
+    }
+
+    @Test
+    void aLineThatIsValidJsonButHasNoCommandInTheMiddleIsCorruption() throws IOException {
+        Path file = writeLog(4);
+        List<String> lines = Files.readAllLines(file);
+        lines.set(1, "{\"sequence\":2}"); // an entry with nothing to replay
+        Files.write(file, lines);
+
+        assertThrows(CorruptLogException.class, () -> EventLog.readRecoverable(file));
+    }
+
+    @Test
+    void theWordNullInTheMiddleIsCorruptionNotAnEmptyEntry() throws IOException {
+        Path file = writeLog(4);
+        List<String> lines = Files.readAllLines(file);
+        lines.set(1, "null"); // valid JSON, but it is not an entry
+        Files.write(file, lines);
+
+        assertThrows(CorruptLogException.class, () -> EventLog.readRecoverable(file));
+    }
+
     // ---------------------------------------------------------------- the cheap two-stage read (LogScan)
 
     @Test

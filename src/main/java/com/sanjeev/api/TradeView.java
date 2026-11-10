@@ -8,6 +8,6 @@ public record TradeView(long tradeId, long buyOrderId, long sellOrderId, String 
 
     static TradeView from(Trade trade) {
         return new TradeView(trade.tradeId(), trade.buyOrderId(), trade.sellOrderId(), trade.buyer(),
-                trade.seller(), Money.paiseToRupees(trade.price()), trade.quantity(), trade.sequence());
+                trade.seller(), Money.paiseToRupees(trade.price()), trade.quantity(), trade.incomingSequence());
     }
 }

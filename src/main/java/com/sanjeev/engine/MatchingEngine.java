@@ -111,7 +111,7 @@ public final class MatchingEngine {
 
         // Price changed or quantity grew: go to the back of the line as a brand-new order.
         Order replacement = new Order(order.getId(), order.getTrader(), order.getSide(),
-                newPrice, newQuantity, lastSequence + 1);
+                newPrice, newQuantity, nextSequence());
         book.cancel(orderId);
         return submitLimit(replacement);
     }

@@ -34,7 +34,7 @@ public final class Simulation {
             Long bestBid,
             Long bestAsk,
             int restingOrders,
-            int ordersChecked,
+            int orderIdsChecked,
             long elapsedNanos) {
 
         public int ordersSubmitted() {
@@ -49,7 +49,57 @@ public final class Simulation {
         long cancelled;  // quantity removed without trading (cancel, IOC/market leftover, FOK refusal, reduction)
     }
 
+    /** What the simulation remembers about an order while it rests: its price and arrival number. */
+    record RestingInfo(long priceInPaise, long sequence) { }
+
     private Simulation() { }
+
+    /**
+     * Price-time priority, checked on the trades one incoming order made, in the order they happened.
+     * Against its resting counterparts, an incoming order must trade:
+     * <ul>
+     *   <li>at the RESTING order's price, never its own limit;</li>
+     *   <li>best price first (a buyer meets the cheapest sellers first, a seller the dearest buyers);</li>
+     *   <li>at one price, the oldest resting order first.</li>
+     * </ul>
+     *
+     * @param resting price and arrival number of every order that was resting before the operation
+     * @throws IllegalStateException describing the first rule broken
+     */
+    static void verifyPriority(List<Trade> made, Side aggressorSide, Map<Long, RestingInfo> resting) {
+        long previousPrice = 0;
+        long previousSequence = 0;
+        boolean first = true;
+        for (Trade trade : made) {
+            long restingId = aggressorSide == Side.BUY ? trade.sellOrderId() : trade.buyOrderId();
+            RestingInfo info = resting.get(restingId);
+            if (info == null) {
+                throw new IllegalStateException(trade + " is against order " + restingId
+                        + ", which was never seen resting");
+            }
+            if (trade.price() != info.priceInPaise()) {
+                throw new IllegalStateException("a trade must happen at the RESTING order's price "
+                        + info.priceInPaise() + " but " + trade + " did not");
+            }
+            if (!first) {
+                boolean worse = aggressorSide == Side.BUY
+                        ? trade.price() < previousPrice
+                        : trade.price() > previousPrice;
+                if (worse) {
+                    throw new IllegalStateException("best price first was broken: " + trade
+                            + " came after a trade at " + previousPrice);
+                }
+                if (trade.price() == previousPrice && info.sequence() <= previousSequence) {
+                    throw new IllegalStateException("oldest order first was broken at price "
+                            + previousPrice + ": " + trade + " (arrival " + info.sequence()
+                            + ") came after arrival " + previousSequence);
+                }
+            }
+            previousPrice = trade.price();
+            previousSequence = info.sequence();
+            first = false;
+        }
+    }
 
     /** Run {@code operations} seeded operations. Throws IllegalStateException on ANY violation. */
     public static Result run(long seed, int operations) {
@@ -107,6 +157,7 @@ public final class Simulation {
         final OrderGenerator generator;
         final Map<Long, Ledger> ledgers = new HashMap<>();
         final List<Trade> trades = new ArrayList<>();
+        final Map<Long, RestingInfo> restingInfo = new HashMap<>();
         long tradedQuantity;
         int limitOrders;
         int marketOrders;
@@ -140,6 +191,10 @@ public final class Simulation {
             ledger(order.getId()).added += order.getOriginalQuantity();
             List<Trade> made = engine.submitLimit(order);
             record(made);
+            verifyPriority(made, order.getSide(), restingInfo);
+            if (book.contains(order.getId())) {
+                restingInfo.put(order.getId(), new RestingInfo(order.getPriceInPaise(), order.getSequence()));
+            }
 
             for (Trade trade : made) { // an aggressor never trades at a worse price than its limit
                 boolean withinLimit = order.getSide() == Side.BUY
@@ -165,7 +220,9 @@ public final class Simulation {
         private void submitMarket(Order order) {
             marketOrders++;
             ledger(order.getId()).added += order.getOriginalQuantity();
-            record(engine.submitMarket(order));
+            List<Trade> made = engine.submitMarket(order);
+            record(made);
+            verifyPriority(made, order.getSide(), restingInfo);
             require(!book.contains(order.getId()), "market order must never rest: " + order);
             ledger(order.getId()).cancelled += order.getRemainingQuantity();
         }
@@ -188,6 +245,11 @@ public final class Simulation {
 
             List<Trade> made = engine.modify(m.orderId(), m.newPrice(), m.newQuantity());
             record(made);
+            verifyPriority(made, before.getSide(), restingInfo);
+            Order after = book.restingOrder(m.orderId());
+            if (after != null) { // still resting: its price and place in the queue may have changed
+                restingInfo.put(m.orderId(), new RestingInfo(after.getPriceInPaise(), after.getSequence()));
+            }
 
             Ledger ledger = ledger(m.orderId());
             boolean inPlace = m.newPrice() == oldPrice && m.newQuantity() <= oldRemaining;
@@ -240,7 +302,7 @@ public final class Simulation {
         System.out.printf("Traded quantity:    %,d%n", r.tradedQuantity());
         System.out.printf("Final best bid/ask: %s / %s%n", r.bestBid(), r.bestAsk());
         System.out.printf("Resting orders:     %,d%n", r.restingOrders());
-        System.out.printf("Conservation:       OK for %,d order ids%n", r.ordersChecked());
+        System.out.printf("Conservation:       OK for %,d order ids%n", r.orderIdsChecked());
         System.out.printf("Time taken:         %,d ms (invariants checked after every operation)%n",
                 r.elapsedNanos() / 1_000_000);
     }

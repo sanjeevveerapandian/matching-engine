@@ -41,6 +41,14 @@ public final class BookInvariants {
                     if (order.getPriceInPaise() != price || level.getPriceInPaise() != price) {
                         throw broken(order + " sits in a level priced " + price);
                     }
+                    // 3b. a BUY belongs on the bid side and a SELL on the ask side
+                    if (order.getSide() != side) {
+                        throw broken(order + " is on the wrong side: filed under " + side);
+                    }
+                    // 3c. only good-till-cancelled limit orders may rest
+                    if (order.getType() != OrderType.LIMIT || order.getTimeInForce() != TimeInForce.GTC) {
+                        throw broken(order + " is resting but is not a good-till-cancelled limit order");
+                    }
                     // 4. no finished or negative orders still resting
                     if (order.getRemainingQuantity() <= 0) {
                         throw broken(order + " has remaining quantity "

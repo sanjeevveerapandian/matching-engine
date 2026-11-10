@@ -1,5 +1,6 @@
 package com.sanjeev.engine;
 
+import static com.sanjeev.engine.BookTestSupport.quantityAt;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -39,13 +40,6 @@ class ModifyAndTimeInForceTest {
         return order;
     }
 
-    private long quantityAt(Side side, long price) {
-        return book.depth(side, 100).stream()
-                .filter(level -> level.priceInPaise() == price)
-                .mapToLong(OrderBook.Level::totalQuantity)
-                .sum();
-    }
-
     // ---------------------------------------------------------------- modify
 
     @Test
@@ -74,7 +68,7 @@ class ModifyAndTimeInForceTest {
 
         assertEquals(anu, book.levelAt(Side.BUY, 3000).peekFirst());
         assertEquals(3, anu.getRemainingQuantity());
-        assertEquals(13, quantityAt(Side.BUY, 3000));
+        assertEquals(13, quantityAt(book, Side.BUY, 3000));
     }
 
     @Test
@@ -124,7 +118,7 @@ class ModifyAndTimeInForceTest {
         engine.modify(ravi.getId(), 3000, 15);
 
         assertEquals(priya, book.levelAt(Side.SELL, 3000).peekFirst());
-        assertEquals(25, quantityAt(Side.SELL, 3000));
+        assertEquals(25, quantityAt(book, Side.SELL, 3000));
         List<Trade> trades = engine.submitLimit(
                 new Order(nextId, "Anu", Side.BUY, 3000, 10, nextId));
         assertEquals("Priya", trades.get(0).seller());
@@ -169,7 +163,7 @@ class ModifyAndTimeInForceTest {
         assertEquals(3, trades.get(0).quantity());
         assertNull(book.bestAsk());
         assertEquals(3100L, book.bestBid());
-        assertEquals(2, quantityAt(Side.BUY, 3100));
+        assertEquals(2, quantityAt(book, Side.BUY, 3100));
     }
 
     @Test
@@ -234,7 +228,7 @@ class ModifyAndTimeInForceTest {
 
         assertTrue(trades.isEmpty());
         assertNull(book.bestBid());
-        assertEquals(10, quantityAt(Side.SELL, 3100));
+        assertEquals(10, quantityAt(book, Side.SELL, 3100));
     }
 
     @Test
@@ -248,7 +242,7 @@ class ModifyAndTimeInForceTest {
         assertEquals(1, trades.size());
         assertEquals(3000, trades.get(0).price());
         assertEquals(20, anu.getRemainingQuantity());
-        assertEquals(10, quantityAt(Side.SELL, 3200));
+        assertEquals(10, quantityAt(book, Side.SELL, 3200));
         assertNull(book.bestBid());
     }
 
@@ -260,7 +254,7 @@ class ModifyAndTimeInForceTest {
         engine.submitLimit(anu);
 
         assertEquals(3000L, book.bestBid());
-        assertEquals(15, quantityAt(Side.BUY, 3000));
+        assertEquals(15, quantityAt(book, Side.BUY, 3000));
     }
 
     // ---------------------------------------------------------------- FOK
@@ -277,7 +271,7 @@ class ModifyAndTimeInForceTest {
         assertEquals(10, trades.get(0).quantity());
         assertEquals(5, trades.get(1).quantity());
         assertTrue(anu.isFullyFilled());
-        assertEquals(5, quantityAt(Side.SELL, 3100));
+        assertEquals(5, quantityAt(book, Side.SELL, 3100));
         assertNull(book.bestBid());
     }
 
@@ -333,8 +327,8 @@ class ModifyAndTimeInForceTest {
         List<Trade> trades = engine.submitLimit(anu);
 
         assertTrue(trades.isEmpty());
-        assertEquals(10, quantityAt(Side.SELL, 3000));
-        assertEquals(100, quantityAt(Side.SELL, 3200));
+        assertEquals(10, quantityAt(book, Side.SELL, 3000));
+        assertEquals(100, quantityAt(book, Side.SELL, 3200));
     }
 
     @Test
@@ -345,7 +339,7 @@ class ModifyAndTimeInForceTest {
         List<Trade> trades = engine.submitLimit(ravi);
 
         assertTrue(trades.isEmpty());
-        assertEquals(10, quantityAt(Side.BUY, 3000));
+        assertEquals(10, quantityAt(book, Side.BUY, 3000));
         assertNull(book.bestAsk());
     }
 

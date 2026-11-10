@@ -49,7 +49,7 @@ public final class Responses {
 
     public record Level(String price, long quantity) {
 
-        static Level from(OrderBook.Level level) {
+        static Level from(OrderBook.LevelSummary level) {
             return new Level(Money.paiseToRupees(level.priceInPaise()), level.totalQuantity());
         }
     }
