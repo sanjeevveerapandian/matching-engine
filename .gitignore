@@ -2,4 +2,5 @@ target/
 .idea/
 *.iml
 benchmarks/results/*.jfr
+data/
 

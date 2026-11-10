@@ -7,11 +7,13 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Function;
 
 /**
- * Many threads submit commands; ONE thread runs the engine.
+ * Many threads submit work; ONE thread runs the engine.
  *
  * <pre>
  *   producer threads ---submit---> [ bounded queue ] ---take---> ENGINE THREAD
@@ -19,10 +21,19 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  *                                                                  2. append it to the log + flush   (write-ahead)
  *                                                                  3. apply it to the engine
  *                                                                  4. publish the events
+ *                                                                  5. complete the caller's future
  * </pre>
  *
  * <p>The engine, the book and the sequence counter are touched ONLY by the engine thread, so
  * they need no locks at all. All the concurrency in the system is the queue.
+ *
+ * <p>Two kinds of work go through the queue:
+ * <ul>
+ *   <li>COMMANDS ({@link #submit}, {@link #submitForResult}): numbered, logged, applied.</li>
+ *   <li>QUERIES ({@link #query}): read-only questions about the engine. They run on the engine
+ *       thread too (the only safe place to read it), in queue order, but they are NOT numbered and
+ *       NOT logged: reading changes nothing, so there is nothing to replay.</li>
+ * </ul>
  *
  * <p>Sequence numbers are assigned by the engine thread as it takes commands, so they are
  * unique and gap-free by construction (1, 2, 3, ...), and they match the order in the log.
@@ -30,15 +41,31 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  *
  * <p>Fail-stop: if the log cannot be written, or anything throws while applying or publishing,
  * the engine thread stops and {@link #failure()} says why. We never apply a command that is
- * not safely in the log, and we never carry on with a possibly corrupt book.
+ * not safely in the log, and we never carry on with a possibly corrupt book. Work that is
+ * waiting, and the command that was running, get their futures completed exceptionally so that
+ * no caller waits forever.
  */
 public final class Sequencer {
 
-    /** Marks the end of the queue. Compared by identity (==); no client can create this object. */
-    private static final Command STOP = new Command.CancelOrder(Long.MIN_VALUE);
+    /** What one command did: the number it was given and the events it produced. */
+    public record Applied(long sequence, List<Event> events) { }
+
+    /** One item of work on the queue. */
+    private sealed interface Work permits CommandWork, QueryWork, Stop { }
+
+    /** A command; {@code result} is null when the caller does not want to wait for it. */
+    private record CommandWork(Command command, CompletableFuture<Applied> result) implements Work { }
+
+    private record QueryWork<T>(Function<MatchingEngine, T> reader, CompletableFuture<T> result)
+            implements Work { }
+
+    /** Marks the end of the queue. */
+    private record Stop() implements Work { }
+
+    private static final Work STOP = new Stop();
     private static final long WAIT_MS = 50;
 
-    private final BlockingQueue<Command> queue;
+    private final BlockingQueue<Work> queue;
     private final MatchingEngine engine;
     private final CommandProcessor processor;
     private final EventLog log;
@@ -62,7 +89,7 @@ public final class Sequencer {
     /**
      * A sequencer that takes no snapshots.
      *
-     * @param queueCapacity how many commands may wait; when full, producers wait (back-pressure)
+     * @param queueCapacity how many items may wait; when full, producers wait (back-pressure)
      */
     public Sequencer(MatchingEngine engine, EventLog log, EventPublisher publisher, int queueCapacity) {
         this(engine, log, publisher, queueCapacity, null, DEFAULT_SNAPSHOT_EVERY);
@@ -99,9 +126,9 @@ public final class Sequencer {
     }
 
     /**
-     * Hand a command to the engine thread. Safe to call from any number of threads. Blocks while
-     * the queue is full. Once this returns normally, the command WILL be logged and applied
-     * (unless the sequencer fails).
+     * Hand a command to the engine thread and do not wait for the outcome. Safe to call from any
+     * number of threads. Blocks while the queue is full. Once this returns normally, the command
+     * WILL be logged and applied (unless the sequencer fails).
      *
      * @throws IllegalStateException if the sequencer is shut down or has failed
      */
@@ -109,13 +136,50 @@ public final class Sequencer {
         if (command == null) {
             throw new IllegalArgumentException("command must not be null");
         }
+        enqueue(new CommandWork(command, null));
+    }
+
+    /**
+     * Like {@link #submit}, but returns a future that the engine thread completes, after the command
+     * has been logged, applied and published, with its sequence number and events. If the sequencer
+     * fails first, the future completes exceptionally instead. Blocks only while the queue is full.
+     *
+     * @throws IllegalStateException if the sequencer is shut down or has failed
+     */
+    public CompletableFuture<Applied> submitForResult(Command command) throws InterruptedException {
+        if (command == null) {
+            throw new IllegalArgumentException("command must not be null");
+        }
+        CompletableFuture<Applied> result = new CompletableFuture<>();
+        enqueue(new CommandWork(command, result));
+        return result;
+    }
+
+    /**
+     * Ask a read-only question about the engine. {@code reader} runs ON THE ENGINE THREAD, in queue
+     * order (so it sees the effect of every command submitted before it), and must return an
+     * immutable copy of whatever it reads: never the engine's own mutable objects. The query is not
+     * numbered or logged. If {@code reader} throws, only this future fails; the engine carries on.
+     *
+     * @throws IllegalStateException if the sequencer is shut down or has failed
+     */
+    public <T> CompletableFuture<T> query(Function<MatchingEngine, T> reader) throws InterruptedException {
+        if (reader == null) {
+            throw new IllegalArgumentException("reader must not be null");
+        }
+        CompletableFuture<T> result = new CompletableFuture<>();
+        enqueue(new QueryWork<>(reader, result));
+        return result;
+    }
+
+    private void enqueue(Work work) throws InterruptedException {
         gate.readLock().lock();
         try {
             if (closed) {
                 throw new IllegalStateException("sequencer is shut down");
             }
             throwIfFailed();
-            while (!queue.offer(command, WAIT_MS, TimeUnit.MILLISECONDS)) {
+            while (!queue.offer(work, WAIT_MS, TimeUnit.MILLISECONDS)) {
                 throwIfFailed(); // do not wait forever on a dead engine thread
             }
         } finally {
@@ -124,7 +188,7 @@ public final class Sequencer {
     }
 
     /**
-     * Stop accepting commands, process everything already accepted, then stop the engine thread
+     * Stop accepting work, process everything already accepted, then stop the engine thread
      * and close the log. Returns when the engine thread has finished.
      */
     public void shutdown() throws InterruptedException {
@@ -134,7 +198,7 @@ public final class Sequencer {
         } finally {
             gate.writeLock().unlock();
         }
-        // every accepted command is already ahead of STOP in the queue
+        // every accepted item is already ahead of STOP in the queue
         while (engineThread.isAlive() && !queue.offer(STOP, WAIT_MS, TimeUnit.MILLISECONDS)) {
             // queue full: the engine thread is still draining it
         }
@@ -148,7 +212,8 @@ public final class Sequencer {
 
     /**
      * The engine, for inspection AFTER the engine thread has finished. While it runs, the engine
-     * belongs to that thread alone, so reading it from here would be a data race.
+     * belongs to that thread alone, so reading it from here would be a data race. (To read it
+     * while running, use {@link #query}.)
      */
     public MatchingEngine engineAfterShutdown() {
         if (engineThread.isAlive()) {
@@ -160,19 +225,18 @@ public final class Sequencer {
     // ------------------------------------------------------------------ the engine thread
 
     private void runLoop() {
+        Work current = null; // what we are working on, so a failure can complete its future
         try {
             while (true) {
-                Command command = queue.take();
-                if (command == STOP) {
-                    return;
+                current = queue.take();
+                switch (current) {
+                    case Stop stop -> {
+                        return;
+                    }
+                    case CommandWork work -> runCommand(work);
+                    case QueryWork<?> query -> runQuery(engine, query);
                 }
-                long sequence = ++lastSequence;
-                log.append(sequence, command);                           // 1. write-ahead
-                List<Event> events = processor.apply(sequence, command); // 2. apply
-                publisher.publish(sequence, events);                     // 3. publish
-                if (snapshots != null && sequence % snapshotEvery == 0) {
-                    takeSnapshot(sequence);                              // 4. now and then, a snapshot
-                }
+                current = null;
             }
         } catch (InterruptedException e) {
             failure = new IllegalStateException("engine thread was interrupted", e);
@@ -181,6 +245,10 @@ public final class Sequencer {
         } catch (Throwable t) {
             failure = t;
         } finally {
+            Throwable cause = failure;
+            if (cause != null) {
+                failPending(current, cause);
+            }
             try {
                 log.close();
             } catch (IOException e) {
@@ -188,6 +256,46 @@ public final class Sequencer {
                     failure = e;
                 }
             }
+        }
+    }
+
+    private void runCommand(CommandWork work) throws IOException {
+        long sequence = ++lastSequence;
+        log.append(sequence, work.command());                           // 1. write-ahead
+        List<Event> events = processor.apply(sequence, work.command()); // 2. apply
+        publisher.publish(sequence, events);                            // 3. publish
+        if (work.result() != null) {
+            work.result().complete(new Applied(sequence, events));      // 4. answer the caller
+        }
+        if (snapshots != null && sequence % snapshotEvery == 0) {
+            takeSnapshot(sequence);                                     // 5. now and then, a snapshot
+        }
+    }
+
+    private static <T> void runQuery(MatchingEngine engine, QueryWork<T> query) {
+        try {
+            query.result().complete(query.reader().apply(engine));
+        } catch (RuntimeException e) {
+            query.result().completeExceptionally(e); // a bad reader fails only its own query
+        }
+    }
+
+    /** After a fatal failure: nobody who is waiting may wait forever. */
+    private void failPending(Work current, Throwable cause) {
+        Throwable reason = new IllegalStateException("sequencer stopped after a failure: " + cause, cause);
+        failWork(current, reason);
+        Work waiting;
+        while ((waiting = queue.poll()) != null) {
+            failWork(waiting, reason);
+        }
+    }
+
+    private static void failWork(Work work, Throwable reason) {
+        switch (work) {
+            case CommandWork command when command.result() != null ->
+                    command.result().completeExceptionally(reason); // no effect if already completed
+            case QueryWork<?> query -> query.result().completeExceptionally(reason);
+            case null, default -> { }
         }
     }
 

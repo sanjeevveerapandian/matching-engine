@@ -12,21 +12,52 @@
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <junit.version>5.10.2</junit.version>
-        <jackson.version>2.18.2</jackson.version>
+        <!-- Keep parameter names in the class files, so Spring can bind @PathVariable and records by name. -->
+        <maven.compiler.parameters>true</maven.compiler.parameters>
+        <spring-boot.version>3.5.16</spring-boot.version>
     </properties>
 
+    <!--
+      Spring Boot's "bill of materials": it only says WHICH VERSION of each library to use (Jackson,
+      JUnit, Mockito, Tomcat, ...), so they all fit together. We import it instead of inheriting
+      spring-boot-starter-parent, so this pom keeps its own plugin versions and structure.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
-        <!-- Used ONLY by com.sanjeev.infra (the command log). The engine package never imports it. -->
+        <!-- Used by com.sanjeev.infra (the command log). The engine package never imports it.
+             No version here: Spring Boot's bill of materials picks the one Spring itself uses. -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>${jackson.version}</version>
+        </dependency>
+
+        <!-- Used ONLY by com.sanjeev.api (the REST layer). Neither engine nor infra imports Spring. -->
+        <dependency>
+            <!-- Spring MVC + embedded Tomcat + Jackson JSON -->
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <version>${junit.version}</version>
+            <!-- Bean Validation (@NotBlank, @Positive, ...) -->
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <dependency>
+            <!-- JUnit 5, Mockito, AssertJ, MockMvc, JSONPath: replaces the plain junit-jupiter dependency -->
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -46,6 +77,26 @@
                 <configuration>
                     <mainClass>com.sanjeev.sim.CrashRecoveryDemo</mainClass>
                 </configuration>
+            </plugin>
+            <!--
+              Runs the REST API:  mvn spring-boot:run   (or, after mvn package:  java -jar target/matching-engine-*.jar).
+              "repackage" turns the plain jar into one executable jar that contains Tomcat and every dependency.
+              Its version is not managed by the bill of materials, so it is set here.
+            -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>${spring-boot.version}</version>
+                <configuration>
+                    <mainClass>com.sanjeev.api.MatchingEngineApplication</mainClass>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
