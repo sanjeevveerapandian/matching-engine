@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Matching Engine · Live Market</title>
+<style>
+  :root {
+    --bg: #f3f5f9; --card: #ffffff; --text: #1b2330; --muted: #667085; --line: #e2e7ef;
+    --ask: #d3354a; --ask-bg: rgba(211, 53, 74, .13);
+    --bid: #14895a; --bid-bg: rgba(20, 137, 90, .13);
+    --accent: #2f6df6; --radius: 14px; --shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 4px 14px rgba(16, 24, 40, .05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1219; --card: #151c26; --text: #e6ebf2; --muted: #8b97a8; --line: #263041;
+      --ask: #ff6f7e; --ask-bg: rgba(255, 111, 126, .16);
+      --bid: #3fdc98; --bid-bg: rgba(63, 220, 152, .15);
+      --accent: #78a2ff; --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---------- top bar ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; padding: 10px 16px; background: var(--card); border-bottom: 1px solid var(--line);
+  }
+  .brand { font-weight: 700; letter-spacing: .2px; display: flex; align-items: baseline; gap: 8px; }
+  .brand small { font-weight: 500; color: var(--muted); }
+  .status { display: flex; align-items: center; gap: 10px; }
+  .rate { color: var(--muted); font-size: 13px; }
+  .pill { padding: 4px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+  .pill.live { background: var(--bid-bg); color: var(--bid); }
+  .pill.connecting { background: rgba(217, 143, 12, .16); color: #b97700; }
+  .pill.offline { background: var(--ask-bg); color: var(--ask); }
+
+  /* ---------- layout: laptop = 3 columns, tablet = 2, phone = 1 ---------- */
+  .layout {
+    display: grid; gap: 16px; padding: 16px; max-width: 1300px; margin: 0 auto;
+    grid-template-columns: 340px minmax(0, 1fr) 380px; grid-template-areas: "order book tape"; align-items: start;
+  }
+  .order { grid-area: order; } .book { grid-area: book; } .tape { grid-area: tape; }
+  @media (max-width: 1020px) {
+    .layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "book tape" "order order"; }
+  }
+  @media (max-width: 640px) {
+    .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "book" "order" "tape"; padding: 10px; gap: 12px; }
+    .topbar { padding: 8px 12px; } .brand small { display: none; }
+  }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 16px 16px; }
+  .card h2 { margin: 0 0 2px; font-size: 16px; }
+  .sub { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+
+  /* ---------- order book ladder ---------- */
+  .ladder { font-size: 14px; }
+  .ladder .head, .row { display: grid; grid-template-columns: 1fr 1fr; padding: 0 8px; }
+  .ladder .head { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; padding-bottom: 6px; }
+  .head span:last-child, .row .qty { text-align: right; }
+  .row { position: relative; height: 27px; align-items: center; border-radius: 4px; overflow: hidden; }
+  .row .bar { position: absolute; top: 2px; bottom: 2px; right: 0; width: 0; border-radius: 3px; transition: width .12s ease-out; }
+  .row.ask .bar { background: var(--ask-bg); } .row.bid .bar { background: var(--bid-bg); }
+  .row .price, .row .qty { position: relative; font-variant-numeric: tabular-nums; }
+  .row.ask .price { color: var(--ask); font-weight: 600; } .row.bid .price { color: var(--bid); font-weight: 600; }
+  .row.empty .price { color: var(--muted); font-weight: 400; }
+  .spread {
+    margin: 6px 0; padding: 8px; text-align: center; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    font-weight: 700; font-size: 15px;
+  }
+  .spread small { display: block; font-weight: 500; color: var(--muted); font-size: 12px; margin-top: 1px; }
+
+  /* ---------- trade tape ---------- */
+  .tape-list { max-height: 640px; overflow-y: auto; font-size: 14px; }
+  .trade { display: grid; grid-template-columns: 64px 1fr 56px; gap: 6px; padding: 6px 4px; border-bottom: 1px solid var(--line); align-items: baseline; }
+  .trade .who { grid-column: 1 / -1; color: var(--muted); font-size: 12px; margin-top: -4px; overflow-wrap: anywhere; }
+  .trade .time { color: var(--muted); font-size: 12px; }
+  .trade .price { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .trade .price.up { color: var(--bid); } .trade .price.down { color: var(--ask); }
+  .trade .qty { text-align: right; font-variant-numeric: tabular-nums; }
+  .trade.flash { animation: flash 1.1s ease-out; }
+  @keyframes flash { from { background: var(--accent); background: color-mix(in srgb, var(--accent) 28%, transparent); } to { background: transparent; } }
+  .empty-note { color: var(--muted); padding: 18px 4px; text-align: center; }
+
+  /* ---------- order form ---------- */
+  form { display: grid; gap: 12px; }
+  label.field { display: grid; gap: 4px; font-size: 13px; color: var(--muted); font-weight: 600; }
+  input[type=text], input[type=number] {
+    width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--bg); color: var(--text); font: inherit; font-size: 16px; /* 16px stops iOS zooming on focus */
+  }
+  input:disabled { opacity: .5; }
+  input:focus-visible, button:focus-visible, .seg input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin: 0; padding: 0; border: 0; position: relative; }
+  .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg label {
+    display: flex; align-items: center; justify-content: center; min-height: 44px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--text); font-weight: 600; cursor: pointer; user-select: none;
+  }
+  .seg label:first-of-type { border-radius: 10px 0 0 10px; } .seg label:last-of-type { border-radius: 0 10px 10px 0; border-left: 0; }
+  #side-buy:checked + label { background: var(--bid); border-color: var(--bid); color: #fff; }
+  #side-sell:checked + label { background: var(--ask); border-color: var(--ask); color: #fff; }
+  #type-limit:checked + label, #type-market:checked + label { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  button {
+    min-height: 46px; border: 0; border-radius: 10px; padding: 10px 14px; font: inherit; font-weight: 700; font-size: 15px;
+    cursor: pointer; color: #fff; background: var(--accent);
+  }
+  button:disabled { opacity: .55; cursor: progress; }
+  form[data-side="BUY"] .submit { background: var(--bid); } form[data-side="SELL"] .submit { background: var(--ask); }
+  button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); width: 100%; }
+  .result { min-height: 20px; font-size: 14px; border-radius: 10px; padding: 0; }
+  .result.ok, .result.error { padding: 9px 12px; }
+  .result.ok { background: var(--bid-bg); color: var(--bid); } .result.error { background: var(--ask-bg); color: var(--ask); }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0 12px; }
+  .hint { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
+  footer { max-width: 1300px; margin: 0 auto; padding: 4px 16px 24px; color: var(--muted); font-size: 12.5px; }
+  @media (prefers-reduced-motion: reduce) { .trade.flash { animation: none; } .row .bar { transition: none; } }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">⇄ Matching Engine <small>live market</small></div>
+  <div class="status">
+    <span id="rate" class="rate num" title="Book updates received per second. The server sends at most 10.">0 book updates/s</span>
+    <span id="status" class="pill connecting" role="status" aria-live="polite">Connecting…</span>
+  </div>
+</header>
+
+<main class="layout">
+
+  <!-- ===== order book ===== -->
+  <section class="card book" aria-labelledby="book-h">
+    <h2 id="book-h">Order book</h2>
+    <p class="sub">Asks (sellers) in red above, bids (buyers) in green below. Prices in ₹.</p>
+    <div class="ladder">
+      <div class="head"><span>Price (₹)</span><span>Quantity</span></div>
+      <div id="asks" aria-label="Asks, highest price at the top"></div>
+      <div id="spread" class="spread num" aria-live="off">—</div>
+      <div id="bids" aria-label="Bids, highest price at the top"></div>
+    </div>
+  </section>
+
+  <!-- ===== place an order ===== -->
+  <section class="card order" aria-labelledby="order-h">
+    <h2 id="order-h">Place an order</h2>
+    <p class="sub">Goes to the server, which queues it for the one engine thread.</p>
+    <form id="order-form" data-side="BUY" autocomplete="off" novalidate>
+      <fieldset class="seg" aria-label="Side">
+        <input type="radio" name="side" id="side-buy" value="BUY" checked><label for="side-buy">Buy</label>
+        <input type="radio" name="side" id="side-sell" value="SELL"><label for="side-sell">Sell</label>
+      </fieldset>
+      <fieldset class="seg" aria-label="Order type">
+        <input type="radio" name="type" id="type-limit" value="LIMIT" checked><label for="type-limit">Limit</label>
+        <input type="radio" name="type" id="type-market" value="MARKET"><label for="type-market">Market</label>
+      </fieldset>
+      <label class="field">Trader
+        <input type="text" id="trader" maxlength="64" placeholder="Your name" required>
+      </label>
+      <div class="row2">
+        <label class="field">Price (₹)
+          <input type="text" id="price" inputmode="decimal" placeholder="40.50">
+        </label>
+        <label class="field">Quantity
+          <input type="number" id="quantity" min="1" step="1" inputmode="numeric" placeholder="10" required>
+        </label>
+      </div>
+      <button type="submit" class="submit" id="submit">Place buy order</button>
+      <div id="result" class="result" role="status" aria-live="polite"></div>
+    </form>
+    <hr>
+    <p class="hint">Quiet market? Let a robot trade for a moment.</p>
+    <button type="button" class="secondary" id="simulate">Simulate traffic (1000 orders)</button>
+  </section>
+
+  <!-- ===== trade tape ===== -->
+  <section class="card tape" aria-labelledby="tape-h">
+    <h2 id="tape-h">Trades</h2>
+    <p class="sub">Newest first. Price colour shows whether it went up or down.</p>
+    <div id="tape-list" class="tape-list">
+      <div id="tape-empty" class="empty-note">No trades yet. Place two crossing orders, or simulate traffic.</div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  This page never talks to the engine. It sends requests to the server (REST) and listens to a read-only
+  WebSocket feed. Book updates are batched by the server to at most one every 100&nbsp;ms; every trade is sent.
+</footer>
+
+<script>
+(() => {
+  'use strict';
+
+  const DEPTH = 10;       // price levels shown per side
+  const TAPE_MAX = 50;    // trades kept on screen
+  const $ = (id) => document.getElementById(id);
+
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;   // textContent, never innerHTML: names from the server are data, not markup
+    return node;
+  }
+
+  // ------------------------------------------------------------------------------------------
+  // A tiny STOMP client. STOMP is a simple text protocol: a frame is a command line, header lines,
+  // a blank line, a body, and a NUL character. That is all we need to connect and subscribe.
+  // ------------------------------------------------------------------------------------------
+  class StompClient {
+    constructor(url, handlers) {
+      this.url = url; this.handlers = handlers; this.ws = null; this.buffer = '';
+      this.subscriptions = new Map(); this.nextId = 0;
+    }
+    open() {
+      const ws = new WebSocket(this.url);
+      this.ws = ws; this.buffer = '';
+      ws.onopen = () => this._send('CONNECT', { 'accept-version': '1.2', 'heart-beat': '0,0' });
+      ws.onmessage = (event) => this._receive(String(event.data));
+      ws.onclose = () => { this.ws = null; this.handlers.onClose(); };
+      ws.onerror = () => { /* onclose follows */ };
+    }
+    subscribe(destination, callback) {
+      const id = 'sub-' + (this.nextId++);
+      this.subscriptions.set(id, callback);
+      this._send('SUBSCRIBE', { id, destination });
+    }
+    _send(command, headers) {
+      let frame = command + '\n';
+      for (const name in headers) frame += name + ':' + headers[name] + '\n';
+      this.ws.send(frame + '\n\0');
+    }
+    _receive(data) {
+      this.buffer += data;
+      let end;
+      while ((end = this.buffer.indexOf('\0')) !== -1) {
+        const raw = this.buffer.slice(0, end);
+        this.buffer = this.buffer.slice(end + 1);
+        this._frame(raw);
+      }
+    }
+    _frame(raw) {
+      raw = raw.replace(/^[\r\n]+/, '');           // blank lines between frames are heart-beats
+      if (!raw) return;
+      const split = raw.indexOf('\n\n');
+      const head = split === -1 ? raw : raw.slice(0, split);
+      const body = split === -1 ? '' : raw.slice(split + 2);
+      const lines = head.split('\n');
+      const command = lines[0].trim();
+      const headers = {};
+      for (let i = 1; i < lines.length; i++) {
+        const colon = lines[i].indexOf(':');
+        if (colon > 0) {
+          const name = lines[i].slice(0, colon);
+          if (!(name in headers)) headers[name] = lines[i].slice(colon + 1).replace(/\r$/, '');
+        }
+      }
+      if (command === 'CONNECTED') this.handlers.onConnect();
+      else if (command === 'MESSAGE') { const cb = this.subscriptions.get(headers.subscription); if (cb) cb(body); }
+      else if (command === 'ERROR') this.handlers.onError(headers.message || body);
+    }
+  }
+
+  // ------------------------------------------------------------------------------------------
+  // The order book ladder: DEPTH fixed rows per side, updated in place (no flicker, no jumping).
+  // ------------------------------------------------------------------------------------------
+  function buildRows(container, kind) {
+    const rows = [];
+    for (let i = 0; i < DEPTH; i++) {
+      const row = el('div', 'row ' + kind + ' empty');
+      const bar = el('span', 'bar'), price = el('span', 'price', '—'), qty = el('span', 'qty num', '');
+      row.append(bar, price, qty);
+      container.append(row);
+      rows.push({ row, bar, price, qty });
+    }
+    return rows;
+  }
+  const askRows = buildRows($('asks'), 'ask');
+  const bidRows = buildRows($('bids'), 'bid');
+
+  function setRow(cells, level, maxQuantity) {
+    if (!level) {
+      cells.row.classList.add('empty');
+      cells.price.textContent = '—'; cells.qty.textContent = ''; cells.bar.style.width = '0';
+      return;
+    }
+    cells.row.classList.remove('empty');
+    cells.price.textContent = level.price;
+    cells.qty.textContent = level.quantity.toLocaleString();
+    cells.bar.style.width = Math.max(2, (level.quantity / maxQuantity) * 100) + '%';
+  }
+
+  function renderBook(book) {
+    const asks = book.asks.slice(0, DEPTH);          // best (lowest) first
+    const bids = book.bids.slice(0, DEPTH);          // best (highest) first
+    let maxQuantity = 1;
+    for (const level of asks) maxQuantity = Math.max(maxQuantity, level.quantity);
+    for (const level of bids) maxQuantity = Math.max(maxQuantity, level.quantity);
+    // asks are listed WORST at the top, so the best ask sits right above the spread
+    for (let i = 0; i < DEPTH; i++) setRow(askRows[i], asks[DEPTH - 1 - i], maxQuantity);
+    for (let i = 0; i < DEPTH; i++) setRow(bidRows[i], bids[i], maxQuantity);
+
+    const spread = $('spread');
+    spread.textContent = '';
+    if (book.spread !== null && book.spread !== undefined) {
+      spread.append('Spread ₹' + book.spread, el('small', '', 'best bid ' + book.bestBid + ' · best ask ' + book.bestAsk));
+    } else if (book.bestBid || book.bestAsk) {
+      spread.append('One-sided book', el('small', '', book.bestBid ? 'best bid ' + book.bestBid : 'best ask ' + book.bestAsk));
+    } else {
+      spread.append('Empty book');
+    }
+  }
+
+  // ------------------------------------------------------------------------------------------
+  // The trade tape. State changes at once; the screen is redrawn at most once per frame, so a
+  // burst of hundreds of trades does not freeze a phone.
+  // ------------------------------------------------------------------------------------------
+  const emptyNote = $('tape-empty');   // kept in a variable: clearing the list below detaches it from the page
+  let trades = [];                 // newest first: { id, price, quantity, buyer, seller, at }
+  const seenTradeIds = new Set();
+  const freshTradeIds = new Set();
+  let tapeRenderQueued = false;
+
+  function addTrade(trade, live) {
+    if (seenTradeIds.has(trade.tradeId)) return;   // the REST backfill and the live feed can overlap
+    seenTradeIds.add(trade.tradeId);
+    if (live) freshTradeIds.add(trade.tradeId);
+    trades.unshift({ id: trade.tradeId, price: trade.price, quantity: trade.quantity, buyer: trade.buyer,
+                     seller: trade.seller, at: live ? new Date() : null });
+    if (trades.length > TAPE_MAX) trades.length = TAPE_MAX;
+    if (!tapeRenderQueued) { tapeRenderQueued = true; requestAnimationFrame(renderTape); }
+  }
+
+  function renderTape() {
+    tapeRenderQueued = false;
+    const list = $('tape-list');
+    list.textContent = '';
+    if (trades.length === 0) { list.append(emptyNote); return; }
+    trades.forEach((trade, index) => {
+      const older = trades[index + 1];
+      const direction = older ? Math.sign(parseFloat(trade.price) - parseFloat(older.price)) : 0;
+      const row = el('div', 'trade' + (freshTradeIds.has(trade.id) ? ' flash' : ''));
+      row.append(
+        el('span', 'time num', trade.at ? trade.at.toLocaleTimeString([], { hour12: false }) : 'earlier'),
+        el('span', 'price' + (direction > 0 ? ' up' : direction < 0 ? ' down' : ''), '₹' + trade.price),
+        el('span', 'qty', trade.quantity.toLocaleString()),
+        el('span', 'who', trade.buyer + ' bought from ' + trade.seller));
+      list.append(row);
+    });
+    freshTradeIds.clear();
+  }
+
+  // ------------------------------------------------------------------------------------------
+  // Connection: connect, subscribe, load a starting picture, and reconnect with a growing pause.
+  // ------------------------------------------------------------------------------------------
+  let bookUpdates = 0;
+  setInterval(() => { $('rate').textContent = bookUpdates + ' book updates/s'; bookUpdates = 0; }, 1000);
+
+  function setStatus(state, text) {
+    const pill = $('status');
+    pill.className = 'pill ' + state;
+    pill.textContent = text;
+  }
+
+  async function loadSnapshots() {
+    try {
+      const [book, recent] = await Promise.all([
+        fetch('/api/book?depth=' + DEPTH).then((r) => r.json()),
+        fetch('/api/trades?limit=' + TAPE_MAX).then((r) => r.json())]);
+      renderBook(book);
+      recent.slice().reverse().forEach((trade) => addTrade(trade, false));   // oldest first, so newest ends on top
+      if (recent.length === 0 && trades.length === 0) renderTape();
+    } catch (e) { /* the live feed will fill the screen in */ }
+  }
+
+  let attempt = 0;
+  const wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
+
+  function connect() {
+    setStatus('connecting', attempt === 0 ? 'Connecting…' : 'Reconnecting…');
+    const client = new StompClient(wsUrl, {
+      onConnect() {
+        attempt = 0;
+        setStatus('live', 'Live');
+        client.subscribe('/topic/book', (body) => { bookUpdates++; renderBook(JSON.parse(body)); });
+        client.subscribe('/topic/trades', (body) => addTrade(JSON.parse(body), true));
+        loadSnapshots();
+      },
+      onClose() {
+        setStatus('offline', 'Offline');
+        const pause = Math.min(10000, 500 * Math.pow(2, attempt++));
+        setTimeout(connect, pause);
+      },
+      onError(message) { setStatus('offline', 'Error: ' + message); }
+    });
+    client.open();
+  }
+
+  // ------------------------------------------------------------------------------------------
+  // The order form. The server is the authority on what is valid; these checks only save a trip.
+  // ------------------------------------------------------------------------------------------
+  const form = $('order-form');
+  const result = $('result');
+  const priceInput = $('price');
+
+  function showResult(message, kind) {
+    result.className = 'result' + (kind ? ' ' + kind : '');
+    result.textContent = message;
+  }
+
+  function selected(name) { return form.querySelector('input[name="' + name + '"]:checked').value; }
+
+  function syncForm() {
+    const side = selected('side'), type = selected('type');
+    form.dataset.side = side;
+    $('submit').textContent = (type === 'MARKET' ? 'Place market ' : 'Place ') + side.toLowerCase() + ' order';
+    priceInput.disabled = type === 'MARKET';
+    priceInput.placeholder = type === 'MARKET' ? 'best available' : '40.50';
+  }
+  form.addEventListener('change', syncForm);
+  syncForm();
+
+  try { const saved = localStorage.getItem('trader'); if (saved) $('trader').value = saved; } catch (e) { /* storage may be blocked */ }
+
+  function describe(order) {
+    const status = order.status.toLowerCase().replace(/_/g, ' ');
+    let text = 'Order #' + order.orderId + ': ' + status + '. Filled ' + order.filledQuantity + ' of ' + order.quantity;
+    if (order.restingQuantity > 0) text += ', ' + order.restingQuantity + ' waiting on the book';
+    if (order.cancelledQuantity > 0) text += ', ' + order.cancelledQuantity + ' cancelled';
+    if (order.trades.length > 0) text += '. Traded at ₹' + order.trades.map((t) => t.price).join(', ₹');
+    return text + '.';
+  }
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const side = selected('side'), type = selected('type');
+    const trader = $('trader').value.trim();
+    const quantityText = $('quantity').value.trim();
+    if (!trader) return showResult('Enter a trader name.', 'error');
+    if (!/^\d+$/.test(quantityText) || !Number.isSafeInteger(Number(quantityText)) || Number(quantityText) < 1) {
+      return showResult('Quantity must be a whole number of at least 1.', 'error');
+    }
+    const order = { trader, side, type, quantity: Number(quantityText) };
+    if (type === 'LIMIT') order.price = priceInput.value.trim();   // always sent as a STRING: never a float
+    try { localStorage.setItem('trader', trader); } catch (e) { /* ignore */ }
+
+    $('submit').disabled = true;
+    showResult('Sending…', '');
+    try {
+      const response = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify(order) });
+      const data = await response.json();
+      if (response.ok) showResult(describe(data), 'ok');
+      else showResult(data.message || ('The server said ' + response.status + '.'), 'error');
+    } catch (e) {
+      showResult('Could not reach the server.', 'error');
+    } finally {
+      $('submit').disabled = false;
+    }
+  });
+
+  $('simulate').addEventListener('click', async () => {
+    const button = $('simulate');
+    button.disabled = true;
+    showResult('Simulating 1000 orders…', '');
+    try {
+      const response = await fetch('/api/simulate?count=1000', { method: 'POST' });
+      const data = await response.json();
+      if (response.ok) {
+        showResult('Simulated ' + data.requested + ' operations: ' + data.limitOrders + ' limit, ' + data.marketOrders +
+                   ' market, ' + data.cancels + ' cancels, ' + data.modifies + ' modifies. ' + data.trades + ' trades.', 'ok');
+      } else showResult(data.message || ('The server said ' + response.status + '.'), 'error');
+    } catch (e) {
+      showResult('Could not reach the server.', 'error');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  renderBook({ asks: [], bids: [], bestBid: null, bestAsk: null, spread: null });
+  connect();
+})();
+</script>
+</body>
+</html>

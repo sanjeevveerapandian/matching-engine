@@ -44,6 +44,14 @@ public final class Domain {
 
     public record ModifiedOrder(long orderId, long sequence, boolean keptPriority, List<Trade> trades) { }
 
+    /**
+     * What a simulation run did. Every requested operation lands in exactly one of: limitOrders,
+     * marketOrders, cancels, modifies. {@code notFound} counts cancels and modifies that found
+     * their order already gone (filled meanwhile); {@code rejected} counts refused new orders.
+     */
+    public record SimulationResult(int requested, int limitOrders, int marketOrders, int cancels,
+                                   int modifies, int notFound, int rejected, int trades) { }
+
     /** The top of the book: best levels first, and the best bid and ask in paise (null if empty). */
     public record BookSnapshot(List<OrderBook.Level> bids, List<OrderBook.Level> asks, Long bestBid, Long bestAsk) { }
 }

@@ -37,6 +37,16 @@ public final class Responses {
         }
     }
 
+    /** What a simulation run did. See {@link Domain.SimulationResult}. */
+    public record Simulation(int requested, int limitOrders, int marketOrders, int cancels, int modifies,
+                             int notFound, int rejected, int trades, long seed) {
+
+        static Simulation from(Domain.SimulationResult result, long seed) {
+            return new Simulation(result.requested(), result.limitOrders(), result.marketOrders(),
+                    result.cancels(), result.modifies(), result.notFound(), result.rejected(), result.trades(), seed);
+        }
+    }
+
     public record Level(String price, long quantity) {
 
         static Level from(OrderBook.Level level) {

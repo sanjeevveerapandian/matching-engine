@@ -32,17 +32,27 @@ class ExchangeConfig {
 
     /** Spring closes it (stopping the engine thread and closing the log) when the application stops. */
     @Bean(destroyMethod = "close")
-    ExchangeService exchangeService(MatchingProperties properties) throws IOException {
+    ExchangeService exchangeService(MatchingProperties properties, MarketDataListener market) throws IOException {
         Path runDir = properties.dataDir().resolve("run-" + LocalDateTime.now().format(RUN_NAME));
         Files.createDirectories(runDir);
 
         MatchingEngine engine = new MatchingEngine();
         RecentTrades recentTrades = new RecentTrades(properties.recentTrades());
         EventPublisher publisher = (sequence, events) -> {
-            for (Event event : events) { // runs on the engine thread, so no locking is needed
+            // Runs on the engine thread: so no locking is needed for recentTrades, and the market
+            // listener must only leave notes for other threads (it never waits on a network client).
+            boolean mayHaveChangedTheBook = false;
+            for (Event event : events) {
                 if (event instanceof Event.TradeExecuted executed) {
                     recentTrades.add(executed.trade());
+                    market.onTrade(executed.trade());
                 }
+                if (!(event instanceof Event.OrderRejected)) {
+                    mayHaveChangedTheBook = true; // a rejection changes nothing
+                }
+            }
+            if (mayHaveChangedTheBook) {
+                market.onBookChanged();
             }
         };
         Sequencer sequencer = new Sequencer(engine, new EventLog(runDir.resolve("commands.log")), publisher,

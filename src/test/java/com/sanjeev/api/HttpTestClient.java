@@ -34,6 +34,16 @@ final class HttpTestClient {
         return new Reply(response.statusCode(), text == null || text.isBlank() ? null : mapper.readTree(text));
     }
 
+    /** A plain-text answer (for pages that are not JSON). */
+    record RawReply(int status, String contentType, String body) { }
+
+    RawReply raw(String path) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(URI.create(base + path)).timeout(Duration.ofSeconds(15)).GET().build();
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        return new RawReply(response.statusCode(),
+                response.headers().firstValue("Content-Type").orElse(""), response.body());
+    }
+
     Reply get(String path) throws Exception {
         return send("GET", path, null);
     }
