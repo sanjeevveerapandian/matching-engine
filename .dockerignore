@@ -22,7 +22,6 @@ benchmarks
 BENCHMARKS.md
 README.md
 docs
-read.md
 
 # The Docker files themselves are not needed inside the image.
 Dockerfile
