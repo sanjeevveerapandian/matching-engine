@@ -45,4 +45,11 @@ class DeploymentSettingsTest {
         assertEquals("health", properties.getProperty("management.endpoints.web.exposure.include"));
         assertEquals("never", properties.getProperty("management.endpoint.health.show-details"));
     }
+
+    @Test
+    void theHealthAnswerIsTheSameEverywhereBecauseTheCloudOnlyProbeGroupsAreSwitchedOff() throws IOException {
+        // Spring Boot turns the extra liveness/readiness groups on by itself when it detects a cloud platform
+        // (found on Render: the answer gained "groups"). Switched off so the answer is only the status.
+        assertEquals("false", load().getProperty("management.endpoint.health.probes.enabled"));
+    }
 }

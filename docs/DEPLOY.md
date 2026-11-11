@@ -68,18 +68,23 @@ In the Render dashboard (menu names may be slightly different: Render changes it
   (the first build is the slowest), then the Spring Boot banner and `Started MatchingEngineApplication`.
 - Render marks the deploy **Live** when `/actuator/health` answers. If that does not happen within
   15 minutes, Render cancels the deploy and keeps the previous version (there is none the first time).
-- The free instance has a **small CPU (0.1)**, so the app starts much more slowly than on your laptop.
-  I tested the image on my PC with Docker limited to Render's documented 512 MB and 0.1 CPU: it took
-  **about 224 seconds (almost 4 minutes) to answer its health check** (about 9 seconds without the limits).
-  That is well inside Render's 15-minute deploy limit, so a first deploy that "hangs" for a few minutes is
-  normal. This is an emulation: Render's real machines may behave differently, and I have not deployed it.
+- The free instance has a **small CPU (0.1)**, so the app starts more slowly than on your laptop.
+  **Measured on a real first deploy of this repository:** the whole deploy took **2 min 38 s**, and the app's
+  own log said `Started MatchingEngineApplication in 59.105 seconds` (about 2 seconds on a laptop). Render's
+  limit for a deploy is 15 minutes, so a few minutes of "In progress" is normal.
+- For comparison, I had *predicted* nearly 4 minutes by running the image locally with Docker limited to
+  512 MB and 0.1 CPU (about 224 s to answer its health check). That emulation was **pessimistic**: Render's
+  real start-up was about four times faster. Keep that in mind for the simulation numbers below, which come
+  from the same emulation and have **not** been measured on Render.
 
 ## Check that it works
 
 Replace the address with yours:
 
 1. Open `https://<name>.onrender.com/`: the page loads and the badge at the top right says **Live**.
-2. Open `https://<name>.onrender.com/actuator/health`: you should see exactly `{"status":"UP"}`.
+2. Open `https://<name>.onrender.com/actuator/health`: you should see exactly `{"status":"UP"}`. (On Render's
+   first deploy it also listed `"groups":["liveness","readiness"]`: Spring Boot adds those by itself on a cloud
+   platform. I switched them off afterwards, so redeploys show only the status.)
 3. Press **Simulate traffic** on the page: the ladder fills and trades appear on the tape.
 4. Place two crossing orders by hand (Sell then Buy at the same price): the trade appears at once.
 
@@ -90,7 +95,7 @@ goes wrong".
 
 | Fact | What it means for this project |
 |---|---|
-| **Spins down after 15 minutes without incoming traffic** | The first visitor after a quiet spell waits while it starts again (Render says "about one minute"; the Java app on 0.1 CPU may take longer, see above) |
+| **Spins down after 15 minutes without incoming traffic** | The first visitor after a quiet spell waits while it starts again (Render says "about one minute", and its dashboard says requests can be delayed "by 50 seconds or more"). I have not yet timed a real wake-up of this app |
 | **Local files are lost on every restart, redeploy and spin-down; no persistent disk on the free plan** | The command log and snapshots are erased: **the exchange starts empty every time**, and recovery from the log cannot help on this plan |
 | **750 free instance hours per month per workspace** | One always-on service uses about 720 hours in a 30-day month, so it fits, but only one |
 | **512 MB RAM, 0.1 CPU** (Render's compute-plans page) | In my local test with those limits, memory stayed around 145 MiB (heap cap about 308 MB), with no out-of-memory kill. The CPU is the tight part: see "Simulations on a small CPU" below |
@@ -103,7 +108,11 @@ and [compute plans](https://render.com/docs/compute-plans). These limits change,
 **Do not** make a script ping the service to keep it awake: it burns your 750 hours and hides the
 real behaviour. Put a line in your README or CV instead: "free hosting: the first load can take a few minutes".
 
-## Simulations on a small CPU (what I measured)
+## Simulations on a small CPU (measured locally, not on Render)
+
+These numbers come from my PC with Docker limited to Render's documented 512 MB and 0.1 CPU. I have **not**
+repeated them on Render, and start-up there turned out much faster than the emulation predicted, so treat
+them as a cautious estimate.
 
 Render stops sending traffic to an instance after 15 seconds of failed health checks (each must answer
 within 5 seconds) and restarts it after 60 seconds. So I checked that **Simulate traffic** does not make the
@@ -139,7 +148,7 @@ use it. Adding rate limits is listed under "what I would do next" in the README.
 | Build fails with "killed" or out of memory | The free build machine ran out of memory during Maven. Re-run the deploy (**Manual Deploy > Clear build cache & deploy**). If it keeps happening, tell me the log lines and we will slim the build |
 | Deploy never becomes Live | Open **Logs**. If the app logged `Started MatchingEngineApplication` but Render still waits, check the Health Check Path is exactly `/actuator/health` (with the leading `/`) |
 | Page loads but the badge says **Disconnected** | The WebSocket was refused. The app trusts Render's forwarded-host headers (`server.forward-headers-strategy=framework`), so check the logs for `403`, and that you opened the real `https://<name>.onrender.com` address (not an old preview URL) |
-| `502` or a long wait on the first visit | The service was asleep. Render says waking takes about a minute; with the small CPU, expect it to take longer before the app answers (my local emulation took nearly 4 minutes). Wait and reload |
+| `502` or a long wait on the first visit | The service was asleep. Render says waking takes about a minute (its dashboard: "50 seconds or more"). Wait and reload |
 | The book is empty after a few minutes of silence | The service slept and restarted, and the free plan erased the state. Press **Simulate traffic** |
 
 ## Try the image locally first (recommended)

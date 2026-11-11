@@ -4,9 +4,10 @@ A single-symbol stock-exchange matching engine in Java 21: price-time priority, 
 with crash recovery, a REST and WebSocket API, and a live order-book page. Built as a learning project,
 phase by phase, with tests and a seeded simulation checking every step.
 
-**Live demo:** https://YOUR-SERVICE-NAME.onrender.com
-*(replace with your link after deploying, see [docs/DEPLOY.md](docs/DEPLOY.md). It runs on a free plan:
-it sleeps when idle, so the first load can take a few minutes, and its data is erased on every restart.)*
+**Live demo:** https://matching-engine-hwru.onrender.com
+*(Free hosting, see [docs/DEPLOY.md](docs/DEPLOY.md): it sleeps when idle, so the first load after a quiet spell
+is slow (Render's dashboard says requests can be delayed by "50 seconds or more"), and its data is erased on every
+restart. Press **Simulate traffic** to fill the book.)*
 
 ## Architecture
 
@@ -143,7 +144,7 @@ Live feed: STOMP over WebSocket at `/ws`, topics `/topic/book` (top 10 levels, a
 
 ## Testing approach
 
-- **Unit tests** for every behaviour, with names that read as sentences. 669 tests in total.
+- **Unit tests** for every behaviour, with names that read as sentences. 670 tests in total.
 - **Invariants:** a book checker (`BookInvariants`) runs after every operation in the engine tests and in the simulation.
 - **Seeded simulation:** 100,000 random operations (the same seed always gives the same run), checking the book after each one, that quantity is conserved, and that every trade follows price-time priority and happens at the resting price. It found a real sequence-number bug on its first run. I also **mutation-checked** it: six deliberate engine bugs were each caught by the simulation alone.
 - **Replay and recovery:** tests crash the sequencer, then rebuild the engine from the log (and from snapshots) and compare the exact book fingerprint. Damaged or half-written log lines are handled (a torn last line is skipped; corruption anywhere else is refused).
@@ -159,7 +160,7 @@ Live feed: STOMP over WebSocket at `/ws`, topics `/topic/book` (top 10 levels, a
 - **Self-trades are allowed** (a trader can trade with themself). Real exchanges prevent this.
 - Duplicate order ids are only rejected while the original order is resting.
 - The log is flushed to the operating system, not fsynced: a power cut could lose the last few lines (a process crash loses nothing).
-- The Docker image was built and run locally on Docker Desktop, including with 512 MB and 0.1 CPU limits to imitate Render's free plan (start-up took about four minutes under those limits). It has **not** been deployed yet; see [docs/DEPLOY.md](docs/DEPLOY.md) for what the free hosting plan does and does not keep.
+- It is deployed on Render's free plan (512 MB, 0.1 CPU): the first deploy took 2 min 38 s and the app logged "Started in 59 seconds". The free plan has no persistent disk, so the exchange **starts empty after every restart or sleep**; see [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## What I would do next
 
