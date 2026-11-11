@@ -126,4 +126,22 @@ class ExchangeServiceEdgeCasesTest {
         assertTrue(Thread.interrupted(), "close must not swallow the interrupt");
         // stop() closes it again, this time without an interrupt, which must succeed
     }
+
+    @Test
+    void aRunningExchangeReportsNoFailure() throws Exception {
+        start((sequence, events) -> { });
+
+        assertTrue(service.failure().isEmpty());
+    }
+
+    @Test
+    void anExchangeWhoseEngineStoppedAfterAFailureSaysSoWithoutBlocking() throws Exception {
+        start((sequence, events) -> {
+            throw new IllegalStateException("subscriber blew up");
+        });
+        assertThrows(ExchangeUnavailableException.class, () -> service.placeOrder(limit("Anu", 4000, 5)));
+
+        assertTrue(service.failure().isPresent());
+        assertTrue(service.failure().orElseThrow().contains("subscriber blew up"));
+    }
 }

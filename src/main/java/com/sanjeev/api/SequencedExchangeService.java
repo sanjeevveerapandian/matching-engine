@@ -10,6 +10,7 @@ import com.sanjeev.infra.Sequencer;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -114,6 +115,11 @@ final class SequencedExchangeService implements ExchangeService {
     @Override
     public List<Trade> recentTrades(int limit) {
         return await(query(engine -> recentTrades.latest(limit)));
+    }
+
+    @Override
+    public Optional<String> failure() {
+        return sequencer.failure().map(Throwable::toString);
     }
 
     @Override

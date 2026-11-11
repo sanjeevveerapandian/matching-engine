@@ -1,0 +1,29 @@
+# Files that must NOT be sent to Docker as "build context". A smaller context builds faster, and
+# nothing here belongs inside the image.
+
+# Git history and settings: large, and not needed to build.
+.git
+.gitignore
+.gitattributes
+
+# Editor files.
+.idea
+*.iml
+
+# Build output on YOUR machine. The image builds its own, from source, in a clean environment.
+# (Copying a stale target/ into the image could even hide a build problem.)
+target
+
+# The exchange's data from your local runs (command logs, snapshots). Never ship these.
+data
+
+# Benchmark results and the docs: not used by the running server.
+benchmarks
+BENCHMARKS.md
+README.md
+docs
+read.md
+
+# The Docker files themselves are not needed inside the image.
+Dockerfile
+.dockerignore

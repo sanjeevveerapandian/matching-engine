@@ -2,6 +2,7 @@ package com.sanjeev.api;
 
 import com.sanjeev.engine.Trade;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Everything the REST layer can ask of the exchange, in the engine's own terms. The only
@@ -28,6 +29,14 @@ public interface ExchangeService extends AutoCloseable {
 
     /** The most recent trades, newest first, at most {@code limit}. */
     List<Trade> recentTrades(int limit);
+
+    /**
+     * Why the exchange has stopped working, or empty while it is running. A plain read that never waits
+     * in the queue behind orders, so a health check can call it at any time.
+     */
+    default Optional<String> failure() {
+        return Optional.empty();
+    }
 
     /** Stop accepting requests, finish what was accepted, close the log. */
     @Override

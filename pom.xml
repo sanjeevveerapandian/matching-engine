@@ -58,6 +58,12 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-websocket</artifactId>
         </dependency>
+        <dependency>
+            <!-- /actuator/health: the "is it alive?" question a hosting platform asks every few seconds.
+                 Only the health endpoint is exposed (see application.properties). -->
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
 
         <dependency>
             <!-- JUnit 5, Mockito, AssertJ, MockMvc, JSONPath: replaces the plain junit-jupiter dependency -->
