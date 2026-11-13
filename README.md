@@ -1,47 +1,49 @@
 # Matching Engine
 
-This is the part of a stock exchange that matches buy and sell orders. I wanted to know how it actually works, so I built one in Java.
+A stock exchange matching engine I built in Java 21 to learn how exchanges actually match orders. It matches buy and sell orders by price-time priority and streams the order book and trades to the browser live.
 
-Live demo: https://matching-engine-hwru.onrender.com
-(It's on Render's free plan, so the first load can take about a minute. Click **Simulate traffic** to fill the order book.)
+**Live demo:** https://matching-engine-hwru.onrender.com
+Click **Simulate traffic** to fill the order book.
 
 ![Live demo](docs/images/live-demo.png)
+
+## What it does
+
+- Limit orders (GTC, IOC, FOK) and market orders
+- Cancel and modify. Reducing size keeps your place in the queue; changing price or adding size sends you to the back
+- Best price matches first, then the earliest order at that price
+- Order book ladder and trade tape update live over WebSocket
 
 ## How it works
 
 ![Architecture](docs/images/architecture.png)
 
-When you place an order, it goes like this:
+Every command goes into a bounded queue. One sequencer thread takes it off the queue, gives it a sequence number, writes it to a log on disk, applies it to the order book, and then publishes the events. Only that one thread ever touches the book, so it needs no locks.
 
-1. The REST API receives it and puts it in a queue.
-2. One thread, the sequencer, picks orders from the queue one by one.
-3. It first writes the order to a log file on disk.
-4. Then it gives the order to the matching engine, which finds a match in the order book.
-5. The resulting trades go out to the browser over a WebSocket.
+If the app crashes, the book is rebuilt by replaying the log, or from the latest snapshot plus the commands after it.
 
-The key point is that **only one thread ever touches the order book**. So there are no locks and no race conditions. The idea comes from LMAX, an exchange that works the same way.
+Prices are stored as whole paise (`long`), never `double`, so there are no rounding errors.
 
-Matching follows the normal exchange rule: best price first, and if two orders have the same price, the one that came first wins.
+## What I learned from benchmarking
 
-Because every order is written to the log before it's applied, the engine can crash and come back with the exact same order book by replaying the log.
+My first version stored price levels in a `TreeMap`. Profiling showed it was the biggest CPU cost, so I switched to sorted arrays. That made the engine about 23% faster, around 5.9M operations per second in JMH on my laptop (engine only, no network or logging). My first benchmark was also misleading, since almost a third of the orders were being rejected straight away, so I fixed the workload before trusting the numbers. Details are in [BENCHMARKS.md](BENCHMARKS.md).
 
-## Things I learned building it
+## Testing
 
-- **Don't use `double` for money.** 0.1 + 0.2 is not 0.3 in floating point. I store prices as whole paise in a `long`.
-- **Profile before you optimise.** I used a `TreeMap` for price levels, and profiling showed it was the slowest part. Replacing it with plain sorted arrays made the engine about 23% faster.
-- **Check your benchmark, not just your code.** My first benchmark looked great, but almost a third of the orders were being rejected straight away, which made it look faster than it was. I fixed the test data and the numbers became honest.
-- **Random testing finds real bugs.** I wrote a simulation that fires 100,000 random orders and checks the book after each one. It found a bug in sequence numbers on its very first run.
-
-Benchmark details are in [BENCHMARKS.md](BENCHMARKS.md).
+- 670 unit tests, 95.7% line coverage
+- A seeded simulation runs 100,000 random operations and checks the order book after every single one. It caught a real sequence-number bug.
+- Crash tests replay the log and compare a fingerprint of the rebuilt book with the original
 
 ## Run it
 
-You need Java 21 and Maven.
+Needs Java 21 and Maven.
 
 ```bash
-mvn test              # run the tests
-mvn spring-boot:run   # start it, then open http://localhost:8080
+mvn test
+mvn spring-boot:run
 ```
+
+Open http://localhost:8080
 
 Or with Docker:
 
@@ -50,17 +52,14 @@ docker build -t matching-engine .
 docker run -p 8080:8080 matching-engine
 ```
 
-Main API calls:
+## Known limits
 
-- `POST /api/orders` place an order
-- `DELETE /api/orders/{id}` cancel it
-- `GET /api/book` see the order book
-- `GET /api/trades` see recent trades
+- One symbol, one process
+- No login or rate limiting
+- The log is flushed but not fsynced
 
-## What's not done yet
+## Next
 
-- Only one stock symbol
-- No login, so anyone can place orders on the demo
-- Recovery from the log works in tests, but the server doesn't use it on startup yet
-
-Next I want to support multiple symbols and try a ring buffer instead of the queue.
+- Multiple symbols, each with its own engine and log
+- A binary protocol instead of JSON
+- A ring buffer in place of the blocking queue
