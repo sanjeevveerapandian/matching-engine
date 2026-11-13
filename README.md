@@ -1,175 +1,106 @@
 # Matching Engine
 
-A single-symbol stock-exchange matching engine in Java 21: price-time priority, a write-ahead command log
-with crash recovery, a REST and WebSocket API, and a live order-book page. Built as a learning project,
-phase by phase, with tests and a seeded simulation checking every step.
+A stock exchange matching engine I built in Java 21 to understand how exchanges actually work: how orders match, how you keep the order book correct, and how you get it back after a crash.
+
+It handles one symbol, matches by price-time priority, logs every command to disk before applying it, and has a small live page where you can watch the book move.
 
 **Live demo:** https://matching-engine-hwru.onrender.com
-*(Free hosting, see [docs/DEPLOY.md](docs/DEPLOY.md): it sleeps when idle, so the first load after a quiet spell
-is slow (Render's dashboard says requests can be delayed by "50 seconds or more"), and its data is erased on every
-restart. Press **Simulate traffic** to fill the book.)*
+(Free Render instance. It sleeps when idle, so the first load can take up to a minute, and it starts empty after every restart. Hit **Simulate traffic** to fill the book.)
 
-## Architecture
+![Live order book after a simulated burst of 1000 orders](docs/images/live-demo.png)
 
-```mermaid
-flowchart TB
-    Browser["Browser page<br/>order form, ladder, trade tape"]
+## How it works
 
-    subgraph App["Spring Boot application"]
-        API["REST controllers<br/>/api/orders, /api/book, /api/trades"]
-        Queue[("Bounded queue")]
-        Seq["Sequencer: the ONE engine thread<br/>1. take the next command, give it a sequence number<br/>2. append it to the log and flush<br/>3. apply it to the engine<br/>4. publish the events"]
-        Engine["Matching engine<br/>order book, no locks, no I/O"]
-        Feed["Market-data feed<br/>throttled book, trade queue"]
-    end
+![Architecture sketch](docs/images/architecture.png)
 
-    Log[("Command log<br/>JSON lines")]
-    Snap[("Snapshots")]
+The main idea is borrowed from LMAX: **only one thread ever touches the order book.**
 
-    Browser -- "HTTP (REST)" --> API
-    API --> Queue
-    Queue --> Seq
-    Seq -- "write first" --> Log
-    Seq -- "then apply" --> Engine
-    Engine -. "every N commands" .-> Snap
-    Seq -- "events" --> Feed
-    Feed -- "WebSocket / STOMP" --> Browser
-    Log -. "replay after a crash" .-> Engine
-    Snap -. "restore, then replay the rest" .-> Engine
-```
+HTTP requests don't call the engine. They drop a command on a bounded queue and wait. The sequencer thread takes commands one at a time, writes each one to the log, applies it to the engine, then publishes the resulting events. Because nothing else touches the book, the engine has no locks at all, and every run produces one exact order of events.
 
-The engine thread is the only thing that ever touches the order book, so the engine needs no locks. HTTP
-threads only put commands on a bounded queue and wait for the answer. The browser never talks to the
-engine: it sends REST requests and listens to a read-only feed.
+The browser never talks to the engine either. It sends REST requests and listens to a read-only WebSocket feed. Book updates are throttled to one every 100 ms so a slow browser can't slow down matching.
 
-Packages: `engine` (pure matching, no I/O, no Spring), `infra` (commands, log, snapshots, recovery, the
-sequencer), `api` (Spring Boot REST, WebSocket feed, health check), `sim` (seeded simulation, crash demo).
+Code is split into four packages: `engine` (pure matching, no I/O, no Spring), `infra` (commands, log, snapshots, recovery, sequencer), `api` (REST, WebSocket feed, health check) and `sim` (seeded simulation and a crash demo).
 
-## Features
+## What it supports
 
-- **Order types:** limit (GTC, IOC, FOK) and market (always IOC).
-- **Order changes:** cancel, and modify (a size reduction keeps queue position; a price change or size increase loses it).
-- **Matching:** best price first, then earliest arrival; trades happen at the **resting** order's price.
-- **Event stream:** accepted, rejected, trade executed, cancelled, modified.
-- **Durability:** every command is written to a JSON-lines log **before** it is applied.
-- **Recovery:** rebuild the exact book from the log, or from the newest usable snapshot plus the commands after it.
-- **REST API** to place, cancel and modify orders, read the book and recent trades, and run a traffic simulation.
-- **Live page** (plain HTML/CSS/JS, no framework): order form, order-book ladder, trade tape, works on a phone.
-- **Health check:** `GET /actuator/health` reports `UP`, or `DOWN` if the engine thread has stopped after a failure.
-- **Docker image** (multi-stage, runs as a non-root user) and a step-by-step guide to deploy it on Render.
+- Limit orders (GTC, IOC, FOK) and market orders
+- Cancel and modify. Reducing size keeps your place in the queue; changing price or increasing size loses it
+- Trades happen at the resting order's price
+- Write-ahead command log, snapshots, and recovery that rebuilds the exact same book
+- REST API, WebSocket feed, health check, Docker image
 
-## Design decisions, and why
+## A few decisions worth explaining
 
-| Decision | Why |
-|---|---|
-| **Prices are `long` paise, never `double`** | Floating point cannot represent values like 0.10 exactly, and money must be exact. Rupee text (`"40.50"`) exists only at the HTTP edge. |
-| **Price levels: sorted primitive arrays, with an `ArrayDeque` queue per level** | Best price first, then earliest arrival, needs the best price fast and a FIFO queue at each price. I first used a `TreeMap<Long, PriceLevel>`; profiling showed it was the largest CPU cost (about 27%) and `Long` boxing the largest allocation, so I replaced it (Phase 10). The trade-off: inserting a *new* price level costs O(P) instead of O(log P), fine for a few hundred levels, poor for millions. |
-| **An id-to-order `HashMap` index** | Cancelling must find an order by id without scanning the book. |
-| **A single writer thread (the LMAX idea)** | No lock contention around the engine, and one reproducible order of events. All the concurrency in the system is one queue. |
-| **Log the command before applying it** | If the process dies, the log has every command that was applied. This is *command* logging: the log stores the inputs, not the events. |
-| **Determinism: no clock, no randomness inside the engine** | The same commands in the same order always give the same trades and the same book, so replaying the log rebuilds the exact state. A test compares a SHA-256 fingerprint of the book. |
-| **Invariants checked after every operation (in tests and the simulation)** | A corrupt book is found at the operation that broke it, not hours later from a strange trade. Checks include: no crossed book, no empty levels, orders in sequence order, index and book agree. |
-| **Fail-stop** | If the log cannot be written, the engine stops and every waiting caller is released with an error. Nothing unlogged is ever applied. |
-| **The engine thread never waits on a network client** | The book feed is a throttled "something changed" flag (at most one update per 100 ms), and trades go through a bounded queue to a separate thread. A slow browser cannot slow matching. |
-| **FOK counts available quantity before trading** | A fill-or-kill that cannot fill changes nothing. |
-| **The order book refuses to hold anything but a GTC limit order** | Market, IOC and FOK orders can never be left resting by mistake. |
-| **Strict JSON in** | Unknown fields, `10.5` for a whole number, and a number where the price string belongs are refused, because guessing about money is a bug. |
+**Prices are `long` paise, never `double`.** 0.10 can't be stored exactly as a double, and money has to be exact. The rupee string `"40.50"` only exists at the HTTP boundary.
+
+**Log the command first, then apply it.** If the process dies mid-way, the log still has everything that was applied. If the log can't be written, the engine stops instead of applying something that isn't on disk.
+
+**No clock and no randomness inside the engine.** Same commands in, same book out. That's what makes replay work, and a test checks it by comparing a SHA-256 fingerprint of the book.
+
+**I replaced the `TreeMap`.** Price levels started as a `TreeMap<Long, PriceLevel>`. Profiling showed it was the biggest CPU cost (around 27%) and `Long` boxing was the biggest allocation, so I switched to sorted primitive arrays with an `ArrayDeque` per level. Adding a brand new price level is now O(P) instead of O(log P), which is fine for a few hundred levels and bad for millions.
 
 ## Benchmarks
 
-Measured with JMH on one laptop (AMD Ryzen 5 5625U, Windows 11, Java 21, 1 GB heap), on a seeded synthetic
-workload: 60% limit orders, 10% market, 20% cancels, 10% modifies, about 2,000 resting orders at the start.
-Full method, caveats and raw results: [BENCHMARKS.md](BENCHMARKS.md).
+JMH, engine only, on my laptop (Ryzen 5 5625U, Java 21, 1 GB heap). Synthetic mix: 60% limit, 10% market, 20% cancel, 10% modify, about 2,000 resting orders.
 
-| | Before (`TreeMap`) run 1 | Before, run 2 (control) | After (primitive arrays) |
-|---|---|---|---|
-| Throughput (ops/s) | 4,849,313 ± 117,794 | 4,782,590 ± 362,972 | **5,908,741 ± 298,680** |
-| Mean latency per operation | 320.5 ns | 287.4 ns | **249.5 ns** |
-| p50 / p99 latency | 200 / 900 ns | 200 / 900 ns | 200 / 800 ns |
-| Allocation per operation | 480.3 bytes | not measured | **421.8 bytes** |
+| | TreeMap (before) | Primitive arrays (after) |
+|---|---|---|
+| Throughput | ~4.8M ops/s | ~5.9M ops/s |
+| Mean latency | ~300 ns | ~250 ns |
+| Allocation per op | 480 bytes | 422 bytes |
 
-Throughput was **about 23% higher** after the change (+22.7% against the mean of the two "before" runs), and
-the slowest "after" fork was faster than the fastest "before" fork. Read the limits before quoting any number:
+About 23% faster after the change. These numbers don't include the queue, the JSON log or the network, so a full round trip is much slower. I haven't measured end to end yet. Full method, raw results and caveats are in [BENCHMARKS.md](BENCHMARKS.md).
 
-- It measures the **engine only**. It excludes the queue, the JSON log and its `flush()` after every command,
-  snapshots and the network. An end-to-end exchange would be much slower, because logging dominates. I have
-  not measured it end to end.
-- The workload is synthetic, one instrument, a narrow price band, and the same operations replay every batch.
-- One busy laptop, not an isolated benchmark machine. The ratio is more portable than the absolute numbers.
-- Tail latency (p99.9 and beyond) moved by up to 14% between two identical runs, so treat it as noise.
+## Testing
 
-## Run it locally
+670 tests, 95.7% line coverage. The parts I'm most happy with:
 
-### With Maven (Java 21 and Maven)
+- A **book invariant checker** runs after every operation in tests: no crossed book, no empty levels, index and book always agree.
+- A **seeded simulation** runs 100,000 random operations and checks price-time priority and quantity conservation on every trade. It caught a real sequence-number bug on its first run. To check the simulation itself, I planted six deliberate bugs in the engine and it caught all six.
+- **Crash tests** kill the sequencer, rebuild from the log (and from snapshots), and compare fingerprints. A half-written last log line is skipped; corruption anywhere else is refused.
+
+## Run it
 
 ```bash
-mvn test                  # all tests, plus a coverage report in target/site/jacoco/index.html
-mvn spring-boot:run       # the server: open http://localhost:8080/
+mvn test                # tests + coverage report in target/site/jacoco
+mvn spring-boot:run     # then open http://localhost:8080
 ```
 
-Press **Simulate traffic** on the page to fill the book, or place two crossing orders yourself.
-Health check: <http://localhost:8080/actuator/health>.
+Or with Docker:
 
-Run the seeded simulation on its own (default seed 42, 100,000 operations):
+```bash
+docker build -t matching-engine .
+docker run --rm -p 8080:8080 matching-engine
+```
+
+Run just the simulation (seed 42, 100k ops):
 
 ```bash
 mvn compile
 java -cp target/classes com.sanjeev.sim.Simulation 42 100000
 ```
 
-### With Docker
-
-```bash
-docker build -t matching-engine:local .
-docker run --rm -p 8080:8080 --name matching-engine matching-engine:local
-```
-
-Then open <http://localhost:8080/>. Hosting platforms set the `PORT` variable and the server follows it.
-The image is built in two stages (Maven builds the jar; only a small Java runtime image ships) and runs as
-a non-root user.
-
-### REST API
+## API
 
 | Call | What it does |
 |---|---|
-| `POST /api/orders` | Place an order: `{"trader":"Anu","side":"BUY","type":"LIMIT","price":"40.50","quantity":10}` (the price is a **string**, `timeInForce` optional). |
-| `DELETE /api/orders/{id}` | Cancel a resting order. |
-| `PATCH /api/orders/{id}` | Change a resting order: `{"price":"40.60","quantity":8}`. |
-| `GET /api/book?depth=10` | The top levels of each side. |
-| `GET /api/trades?limit=50` | The most recent trades, newest first. |
-| `POST /api/simulate?count=1000` | Run seeded random traffic through the real exchange (1 to 10,000 operations). |
+| `POST /api/orders` | Place an order, e.g. `{"trader":"Anu","side":"BUY","type":"LIMIT","price":"40.50","quantity":10}` |
+| `DELETE /api/orders/{id}` | Cancel |
+| `PATCH /api/orders/{id}` | Modify price or quantity |
+| `GET /api/book?depth=10` | Top of book |
+| `GET /api/trades?limit=50` | Recent trades |
+| `POST /api/simulate?count=1000` | Push random traffic through the real exchange |
 
-Live feed: STOMP over WebSocket at `/ws`, topics `/topic/book` (top 10 levels, at most every 100 ms) and
-`/topic/trades` (every trade, in order). The feed is read-only.
+WebSocket (STOMP) at `/ws`, topics `/topic/book` and `/topic/trades`.
 
-## Testing approach
+## What's missing
 
-- **Unit tests** for every behaviour, with names that read as sentences. 670 tests in total.
-- **Invariants:** a book checker (`BookInvariants`) runs after every operation in the engine tests and in the simulation.
-- **Seeded simulation:** 100,000 random operations (the same seed always gives the same run), checking the book after each one, that quantity is conserved, and that every trade follows price-time priority and happens at the resting price. It found a real sequence-number bug on its first run. I also **mutation-checked** it: six deliberate engine bugs were each caught by the simulation alone.
-- **Replay and recovery:** tests crash the sequencer, then rebuild the engine from the log (and from snapshots) and compare the exact book fingerprint. Damaged or half-written log lines are handled (a torn last line is skipped; corruption anywhere else is refused).
-- **Concurrency:** many producer threads against the single engine thread; the full queue, a failing disk and an interrupted engine thread all have tests.
-- **Integration:** a real server, a real WebSocket and a real STOMP client; including a check that another website's origin is refused.
-- **Coverage:** measured by JaCoCo on every `mvn test`: 95.7% of lines and 94.0% of branches overall (engine 99.6%, infra 99.3%, api 98.9%). The `sim` package is lower (82%) because it includes the demo programs and command-line printing.
+- One symbol, one process
+- No auth or rate limiting, so anyone can trade on the demo
+- Recovery is built and tested but not yet run on startup; each start begins a fresh log
+- Self-trades are allowed (real exchanges block them)
+- The log is flushed, not fsynced, so a power cut could lose the last few lines
 
-## Known limitations
+Next on my list: one engine per symbol, a binary protocol instead of JSON, and trying a Disruptor-style ring buffer in place of the queue (and measuring it before claiming anything).
 
-- Single symbol, single process.
-- **No authentication and no rate limit:** anyone who can reach the server can trade and run simulations.
-- **The server does not resume an old log on start:** every start opens a fresh run folder. Recovery is built and tested, but not yet wired into start-up.
-- **Self-trades are allowed** (a trader can trade with themself). Real exchanges prevent this.
-- Duplicate order ids are only rejected while the original order is resting.
-- The log is flushed to the operating system, not fsynced: a power cut could lose the last few lines (a process crash loses nothing).
-- It is deployed on Render's free plan (512 MB, 0.1 CPU): the first deploy took 2 min 38 s and the app logged "Started in 59 seconds". The free plan has no persistent disk, so the exchange **starts empty after every restart or sleep**; see [docs/DEPLOY.md](docs/DEPLOY.md).
-
-## What I would do next
-
-- **Multiple symbols:** one engine, log and sequencer per symbol, which is how this design scales out.
-- **A binary protocol** (for example a fixed-layout binary format) instead of JSON, to cut parsing and allocation.
-- **A Disruptor-style ring buffer** in place of the `ArrayBlockingQueue`, to cut hand-off latency between producers and the engine thread. I would measure it before claiming any gain.
-- Resume from the log and snapshots on start-up, fsync the log, rate limiting and authentication, and self-trade prevention.
-
-## Documentation
-
-- [docs/DEPLOY.md](docs/DEPLOY.md): deploy to Render, step by step.
-- [BENCHMARKS.md](BENCHMARKS.md): the benchmark method, results and limits in full.
+Deployment steps are in [docs/DEPLOY.md](docs/DEPLOY.md).
