@@ -1,0 +1,45 @@
+# Backup keep-alive for the free Render demo.
+#
+# Render puts a free web service to sleep after 15 minutes without incoming traffic, and waking it
+# takes a while. This workflow sends one cheap request every 10 minutes so the demo stays awake.
+#
+# It is only the BACKUP. The main keep-alive is an UptimeRobot monitor (see docs/DEPLOY.md), because
+# GitHub's scheduler is not a clock:
+#   - scheduled runs can be delayed by many minutes when GitHub is busy, and some are skipped, so a
+#     gap longer than Render's 15 minutes can still happen;
+#   - in a public repository GitHub switches scheduled workflows OFF after 60 days with no repository
+#     activity (any push counts). Re-enable it on the Actions tab if that happens.
+#
+# Only the health endpoint is called: it is cheap (it reads one flag and never touches the order
+# book, the command log or the snapshots) and it wakes the app like any other request.
+
+name: keep-alive
+
+on:
+  schedule:
+    # Every 10 minutes, at :04, :14, :24, :34, :44 and :54. Minutes :00 and :30 are avoided on
+    # purpose: they are when GitHub's scheduler is busiest and most likely to delay or drop runs.
+    - cron: "4-59/10 * * * *"
+  workflow_dispatch:   # lets you run it by hand from the Actions tab
+
+# The URL is public, so the workflow needs no token permissions and no secrets.
+permissions: {}
+
+jobs:
+  ping:
+    # A fork of this repository must not start pinging the demo.
+    if: github.repository == 'sanjeevveerapandian/matching-engine'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Ping the health endpoint
+        # --fail          an error status (4xx, 5xx) makes the run fail, so it shows up in red
+        # --max-time 90   longer than the app's start-up (about 59 s), so a ping that finds it asleep
+        #                 waits for it and succeeds. It also stops a hung request from running forever
+        # --retry 2       try again after a short pause if the first attempt fails
+        run: |
+          curl --fail --silent --show-error \
+               --max-time 90 --retry 2 --retry-delay 15 \
+               --output /dev/null \
+               --write-out 'HTTP %{http_code} in %{time_total}s\n' \
+               https://matching-engine-hwru.onrender.com/actuator/health

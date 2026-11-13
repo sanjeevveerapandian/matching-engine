@@ -97,7 +97,7 @@ goes wrong".
 |---|---|
 | **Spins down after 15 minutes without incoming traffic** | The first visitor after a quiet spell waits while it starts again (Render says "about one minute", and its dashboard says requests can be delayed "by 50 seconds or more"). I have not yet timed a real wake-up of this app |
 | **Local files are lost on every restart, redeploy and spin-down; no persistent disk on the free plan** | The command log and snapshots are erased: **the exchange starts empty every time**, and recovery from the log cannot help on this plan |
-| **750 free instance hours per month per workspace** | One always-on service uses about 720 hours in a 30-day month, so it fits, but only one |
+| **750 free instance hours per month per workspace** | One always-on service uses about 720 to 744 hours a month, so it fits, but **only one** (see "Keeping the demo awake") |
 | **512 MB RAM, 0.1 CPU** (Render's compute-plans page) | In my local test with those limits, memory stayed around 145 MiB (heap cap about 308 MB), with no out-of-memory kill. The CPU is the tight part: see "Simulations on a small CPU" below |
 | Render may restart the service at any time | Same as above: do not expect state to survive |
 
@@ -105,8 +105,51 @@ Sources: Render's pages on [free services](https://render.com/docs/free),
 [web services](https://render.com/docs/web-services), [health checks](https://render.com/docs/health-checks)
 and [compute plans](https://render.com/docs/compute-plans). These limits change, so check them before you rely on them.
 
-**Do not** make a script ping the service to keep it awake: it burns your 750 hours and hides the
-real behaviour. Put a line in your README or CV instead: "free hosting: the first load can take a few minutes".
+## Keeping the demo awake (optional)
+
+A free service sleeps after 15 minutes without traffic, so a visitor who arrives after a quiet spell waits for it to wake.
+You can avoid that by sending it one small request every few minutes. Know the trade-offs first:
+
+- **It uses your free hours.** An always-awake service runs 24 hours a day: **744 of your 750 free hours in a 31-day month**
+  (720 in a 30-day month). That fits **only if it is the only free web service in your Render workspace**. If two free
+  services stay awake, Render suspends the free services until the next month. Check the dashboard before you start.
+- **It does not keep the data.** A restart or a redeploy still erases the order book. Keeping it awake only avoids the
+  *sleep* delay.
+- **It hides how a sleeping free service behaves**, which is fine for a demo, but keep it in mind when you quote start-up times.
+
+**What gets called.** Only `GET /actuator/health`. It is cheap: it reads one flag and never touches the order book, the
+command log or the snapshots (a test proves 50 calls leave the log at 0 bytes). It answered in a few milliseconds on a laptop
+and in 0.2 to 0.5 seconds on the deployed demo, and both `GET` and `HEAD` return `200`. **Never ping `/robots.txt`**: Render
+answers that file itself, without waking your app.
+
+### Main option: an UptimeRobot monitor
+
+| Setting | Value |
+|---|---|
+| Monitor type | **HTTP(s)** |
+| Friendly name | `Matching Engine demo` (anything) |
+| URL | `https://matching-engine-hwru.onrender.com/actuator/health` |
+| Monitoring interval | **5 minutes** (the shortest on UptimeRobot's free plan, per its pricing page) |
+| HTTP method | **GET** if it lets you choose (the check also works with `HEAD`) |
+| Alert contact | your e-mail |
+
+Leave the timeout at its default. A ping that arrives while the service is asleep may be reported as "down" once while it
+wakes up; that ping still wakes it.
+
+### Backup option: the GitHub Actions workflow
+
+`.github/workflows/keep-alive.yml` sends the same request every 10 minutes (at :04, :14, :24, ...), and you can also run it by
+hand from the repository's **Actions** tab ("keep-alive", then **Run workflow**). It is only a **backup**, because GitHub's
+scheduler is not a clock:
+
+- scheduled runs can be **delayed by many minutes** when GitHub is busy, and some are **skipped**, so a gap longer than Render's
+  15 minutes can still happen;
+- in a public repository GitHub **turns scheduled workflows off after 60 days without repository activity** (a push counts).
+  If that happens, re-enable the workflow on the Actions tab.
+
+That is why UptimeRobot is the main option: it is built for exactly this, on a fixed 5-minute clock.
+
+If you would rather not keep it awake, put a line in your README or CV instead: "free hosting: the first load can take a few minutes".
 
 ## Simulations on a small CPU (measured locally, not on Render)
 

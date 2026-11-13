@@ -4,8 +4,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -58,5 +60,31 @@ class ActuatorHealthIntegrationTest {
     void healthDoesNotNeedTheRestApiToBeUsedFirst() throws Exception {
         // a host probes this the moment the process starts, before any trader has done anything
         assertEquals(200, new HttpTestClient(port).get("/actuator/health").status());
+    }
+
+    @Test
+    void healthChecksNeverWriteToTheCommandLogOrTakeSnapshots() throws Exception {
+        // A keep-alive monitor calls this endpoint every few minutes, all day. It must be free: it may not
+        // enter the order queue, use a sequence number, append to the log, or trigger a snapshot.
+        HttpTestClient http = new HttpTestClient(port);
+
+        for (int i = 0; i < 50; i++) {
+            assertEquals(200, http.get("/actuator/health").status());
+        }
+
+        Path run;
+        try (Stream<Path> runs = Files.list(dataDir)) {
+            run = runs.filter(p -> p.getFileName().toString().startsWith("run-")).findFirst().orElseThrow();
+        }
+        assertEquals(0, Files.size(run.resolve("commands.log")), "health checks must not write to the command log");
+        try (Stream<Path> snapshots = Files.list(run.resolve("snapshots"))) {
+            assertEquals(0, snapshots.count(), "health checks must not take snapshots");
+        }
+    }
+
+    @Test
+    void aHeadRequestIsAnsweredToo() throws Exception {
+        // some uptime monitors use HEAD instead of GET
+        assertEquals(200, new HttpTestClient(port).send("HEAD", "/actuator/health", null).status());
     }
 }
